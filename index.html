@@ -6,7 +6,7 @@
   <title>Robot Helper</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.9.1/font/bootstrap-icons.css">
-  <link rel="stylesheet" href="style.css?v=20261027-20">
+  <link rel="stylesheet" href="style.css?v=20261027-21">
 </head>
 <body>
   <main class="robot-shell">
@@ -24,7 +24,7 @@
   <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.8.4/moment.js"></script>
   <script src="js/tableau-extensions-1.0.0.min.js"></script>
-  <script src="js/application.js?v=20261027-20"></script>
+  <script src="js/application.js?v=20261027-21"></script>
   <script>const btnExportToCsv=document.getElementById("btnExportToCsv");if(btnExportToCsv)btnExportToCsv.addEventListener("click",()=>{const dataTable=document.getElementById("dataTable");if(!dataTable)return;const e=new TableCSVExporter(dataTable),c=e.convertToCSV(),b=new Blob([c],{type:"text/csv"}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download="robot-detection.csv";a.click();setTimeout(()=>URL.revokeObjectURL(u),500)});</script>
 </body>
 </html>
