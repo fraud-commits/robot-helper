@@ -185,13 +185,18 @@ function drawChartJS() {
 
              let totaltest = 0;
              var worksheetData = sumdata.data;
-             const columnLabels = (sumdata.columns || []).map(function(column){ return String(column.fieldName || column.fieldCaption || column.caption || '').toLowerCase(); });
+             const columnLabels = (sumdata.columns || []).map(function(column){ return String([column.fieldName, column.fieldCaption, column.caption].filter(Boolean).join(' ')).toLowerCase(); });
              function findColumn(words, fallback){
                const found = columnLabels.findIndex(function(label){ return words.every(function(word){ return label.indexOf(word) !== -1; }); });
                return found >= 0 ? found : fallback;
              }
              function orderedColumn(position, words){
-               return worksheetData.some(function(row){ return row && row[position]; }) ? position : findColumn(words, position);
+               const positionExists = worksheetData.some(function(row){ return row && row[position]; });
+               const positionLabel = columnLabels[position] || '';
+               const positionMatches = words.every(function(word){ return positionLabel.indexOf(word) !== -1; });
+               const namedColumn = findColumn(words, -1);
+               if(positionExists && (positionMatches || namedColumn < 0)) return position;
+               return namedColumn >= 0 ? namedColumn : position;
              }
              const dataColumns = {
                player: orderedColumn(0, ['player','id']),
