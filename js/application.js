@@ -509,7 +509,7 @@ console.log(PlayerData)
 function renderDetectionSummary(playerData){
   lastPlayerData = playerData || [];
   renderedPlayerIds = (playerData || []).map(function(player){ return player.PlayerId; });
-  if(!playerData || !playerData.length){ $('#robot-view').prop('hidden', true); $('#empty-state').show(); $('#initial-loading').prop('hidden', true); $('#no-player-state').prop('hidden', false); return; }
+  if(!playerData || !playerData.length){ $('#robot-view').prop('hidden', true); $('#empty-state').show(); $('#initial-loading').prop('hidden', true); $('#no-player-state').prop('hidden', false); $('#toolbar-player').text('—'); $('#session-stat').text('0 MIN'); $('#round-stat').text('0'); $('#gap-stat').text('0 MIN'); $('#signal-stat').text('0 / 6'); return; }
   $('#initial-loading').prop('hidden', true); $('#no-player-state').prop('hidden', true);
   function parseTime(value){ const parsed = moment(String(value || ''), ['DD/MM/YYYY h:mm:ss A','DD/MM/YYYY HH:mm:ss','DD-MM-YYYY HH:mm a'], true); return parsed.isValid() ? parsed.valueOf() : NaN; }
   function analyze(player){
