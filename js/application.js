@@ -491,7 +491,7 @@ function renderDetectionSummary(playerData){
     const repeatedSignature = signaturePct >= 60;
     const repeatedRoundStructure = structurePct >= 80 && player.bet.length <= 6;
     const bettingMechanism = flatBetting || repeatedSignature || progressivePattern || repeatedRoundStructure;
-    const highVariation = betCv > 0.30 && Number(player.entropy()) > 2.50 && !progressivePattern && !repeatedSignature;
+    const highVariation = betCv > 0.30 && Number(player.entropy()) > 2.50 && !progressivePattern;
     const signalLabels = ['Long session','Rare long pauses','Stable rhythm','Bet Position pattern','Flat betting','Round structure'];
     const signals = [roundTimes.length > 500, longPausePct <= 2, gapCv <= 0.20, player.bet.length <= 6, amounts.length > 1 && betCv <= 0.10, structurePct >= 80];
     const matchedSignals = signalLabels.filter(function(label,index){ return signals[index]; });
