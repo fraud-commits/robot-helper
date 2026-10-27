@@ -189,8 +189,9 @@ function RoundTotla(indexStart,indexNext){
       gaps: [],
       sessionLenght: 0,
       AvgGaps: 0,
-      RoundCount:[],
-      BetAmount:[],
+       RoundCount:[],
+       BetAmount:[],
+       betRecords:[],
        roundBetCounts: {},
        roundTimes: {},
       entropy: function() {
@@ -275,7 +276,8 @@ function RoundTotla(indexStart,indexNext){
   if (element) {
     
    
-    element.BetAmount.push(worksheetData[indexStart][5].formattedValue)
+     element.BetAmount.push(worksheetData[indexStart][5].formattedValue)
+     element.betRecords.push({ position: String(worksheetData[indexStart][4].formattedValue || ''), amount: worksheetData[indexStart][5].formattedValue });
      let roundKey = String(worksheetData[indexStart][2].formattedValue || '');
      element.roundBetCounts[roundKey] = (element.roundBetCounts[roundKey] || 0) + 1;
      element.roundTimes[roundKey] = worksheetData[indexStart][1].formattedValue;
@@ -351,7 +353,8 @@ function renderDetectionSummary(playerData){
     const gapSd = gaps.length ? Math.sqrt(gaps.reduce(function(sum,value){ return sum + Math.pow(value - avgGapSec, 2); },0) / gaps.length) : 0;
     const gapCv = avgGapSec ? gapSd / avgGapSec : 0;
     const longPausePct = gaps.length ? gaps.filter(function(value){ return value > 120; }).length / gaps.length * 100 : 0;
-    const amounts = (player.BetAmount || []).map(function(value){ const text = String(value || '').replace(/[^0-9.,-]/g, '').replace(',', '.'); const number = parseFloat(text); return isFinite(number) ? number : 0; }).filter(function(value){ return value > 0; });
+    const records = (player.betRecords || []).map(function(record){ const text = String(record.amount || '').replace(/[^0-9.,-]/g, '').replace(',', '.'); const amount = parseFloat(text); return { position: record.position, amount: amount, key: record.position + '|' + (isFinite(amount) ? amount : '') }; }).filter(function(record){ return record.amount > 0; });
+    const amounts = records.map(function(record){ return record.amount; });
     const amountMean = amounts.length ? amounts.reduce(function(sum,value){ return sum + value; },0) / amounts.length : 0;
     const amountSd = amounts.length > 1 ? Math.sqrt(amounts.reduce(function(sum,value){ return sum + Math.pow(value - amountMean, 2); },0) / amounts.length) : 0;
     const betCv = amountMean ? amountSd / amountMean : 0;
@@ -359,13 +362,37 @@ function renderDetectionSummary(playerData){
     const countGroups = {}; roundCounts.forEach(function(value){ countGroups[value] = (countGroups[value] || 0) + 1; });
     const structureMode = roundCounts.length ? Math.max.apply(null, Object.keys(countGroups).map(function(key){ return countGroups[key]; })) : 0;
     const structurePct = roundCounts.length ? structureMode / roundCounts.length * 100 : 0;
+    const signatureGroups = {}; records.forEach(function(record){ signatureGroups[record.key] = (signatureGroups[record.key] || 0) + 1; });
+    const signatureMode = records.length ? Math.max.apply(null, Object.keys(signatureGroups).map(function(key){ return signatureGroups[key]; })) : 0;
+    const signaturePct = records.length ? signatureMode / records.length * 100 : 0;
+    const amountGroups = {}; amounts.forEach(function(value){ amountGroups[value] = (amountGroups[value] || 0) + 1; });
+    const amountMode = amounts.length ? Math.max.apply(null, Object.keys(amountGroups).map(function(key){ return amountGroups[key]; })) : 0;
+    const amountModePct = amounts.length ? amountMode / amounts.length * 100 : 0;
+    function hasProgressivePattern(){
+      if(amounts.length < 8) return false;
+      let longestRun = 1, run = 1, direction = 0;
+      for(let i = 1; i < amounts.length; i++){
+        const nextDirection = amounts[i] === amounts[i - 1] ? 0 : (amounts[i] > amounts[i - 1] ? 1 : -1);
+        if(nextDirection && nextDirection === direction) run++; else run = nextDirection ? 2 : 1;
+        if(nextDirection) direction = nextDirection; else direction = 0;
+        if(run > longestRun) longestRun = run;
+      }
+      return longestRun >= 5;
+    }
+    const progressivePattern = hasProgressivePattern();
+    const flatBetting = amounts.length > 1 && betCv <= 0.10;
+    const repeatedSignature = signaturePct >= 60;
+    const bettingMechanism = flatBetting || repeatedSignature || progressivePattern;
+    const highVariation = betCv > 0.30 && Number(player.entropy()) > 2.50 && !progressivePattern && !repeatedSignature;
     const signalLabels = ['Long session','Rare long pauses','Stable rhythm','Bet Position pattern','Flat betting','Round structure'];
     const signals = [roundTimes.length > 500, longPausePct <= 2, gapCv <= 0.20, player.bet.length <= 6, amounts.length > 1 && betCv <= 0.10, structurePct >= 80];
     const matchedSignals = signalLabels.filter(function(label,index){ return signals[index]; });
     const missedSignals = signalLabels.filter(function(label,index){ return !signals[index]; });
     const count = signals.filter(function(value){ return value; }).length;
-    const result = count >= 3 ? 'YES' : (count === 2 ? 'SUSPICIOUS' : 'NO');
-    return { player: player, count: count, result: result, roundCount: roundTimes.length, avgGap: avgGapSec / 60, entropy: Number(player.entropy()) || 0, betCv: betCv, longPausePct: longPausePct, gapCv: gapCv, positionCount: player.bet.length, structurePct: structurePct, matchedSignals: matchedSignals, missedSignals: missedSignals };
+    const supportingCount = [signals[0], signals[1], signals[2], signals[3], signals[5]].filter(function(value){ return value; }).length;
+    const result = bettingMechanism && supportingCount >= 3 && !highVariation ? 'YES' : ((count >= 2 || (signals[0] && !bettingMechanism) || highVariation) ? 'SUSPICIOUS' : 'NO');
+    const mechanismLabel = flatBetting ? 'Flat betting' : (repeatedSignature ? 'Repeated position + amount' : (progressivePattern ? 'Progressive sequence' : 'None detected'));
+    return { player: player, count: count, result: result, roundCount: roundTimes.length, avgGap: avgGapSec / 60, entropy: Number(player.entropy()) || 0, betCv: betCv, longPausePct: longPausePct, gapCv: gapCv, positionCount: player.bet.length, structurePct: structurePct, matchedSignals: matchedSignals, missedSignals: missedSignals, bettingMechanism: mechanismLabel, highVariation: highVariation, supportingCount: supportingCount };
   }
   const analyses = playerData.map(analyze), yes = analyses.filter(function(item){ return item.result === 'YES'; }).length, suspicious = analyses.filter(function(item){ return item.result === 'SUSPICIOUS'; }).length, no = analyses.length - yes - suspicious;
   const totalSignals = analyses.reduce(function(sum,item){ return sum + item.count; },0);
@@ -373,7 +400,7 @@ function renderDetectionSummary(playerData){
   const summaryNote = analyses.length === 1 ? 'One player analysed' : (yes + ' YES · ' + suspicious + ' SUSPICIOUS · ' + no + ' NO');
   $('#robot-view').prop('hidden',false); $('#empty-state').hide(); $('#toolbar-player').text(analyses.length + (analyses.length === 1 ? ' PLAYER' : ' PLAYERS')); $('#session-stat').text(Math.round(Math.max.apply(null, analyses.map(function(item){ return item.player.sessionLenght || 0; }))) + ' MIN MAX'); $('#round-stat').text(analyses.reduce(function(sum,item){ return sum + item.roundCount; },0)); $('#gap-stat').text((analyses.reduce(function(sum,item){ return sum + item.avgGap; },0) / analyses.length).toFixed(2) + ' MIN AVG'); $('#signal-stat').text(totalSignals + ' / ' + (analyses.length * 6));
   $('#robot-result').text(analyses.length > 1 ? analyses.length + ' PLAYERS' : summaryResult).removeClass('result-no result-suspicious result-yes').addClass(summaryResult === 'YES' ? 'result-yes' : (summaryResult === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no')); $('#robot-result-note').text(summaryNote);
-  $('#signal-list').html('<div class="table-responsive"><table class="table table-striped table-hover player-analysis-table" id="dataTable"><thead><tr><th>Player ID</th><th>Signals</th><th>Session (min)</th><th>Rounds</th><th>Avg gap</th><th>Bets</th><th>Tables</th><th>Bet CV</th><th>Entropy</th><th>Robot</th></tr></thead><tbody class="robotTable">' + analyses.map(function(item){ const cls = item.result === 'YES' ? 'result-yes' : (item.result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no'); return '<tr><td>' + item.player.PlayerId + '</td><td><span>' + item.count + ' / 6</span><span class="signal-info" tabindex="0" data-tooltip="Matched: ' + item.matchedSignals.join(', ') + ' | Clear: ' + (item.missedSignals.join(', ') || 'none') + '" aria-label="View matched signals">i</span></td><td>' + Math.round(item.player.sessionLenght || 0) + '</td><td>' + item.roundCount + '</td><td>' + item.avgGap.toFixed(2) + '</td><td>' + item.player.bet.length + '</td><td>' + item.player.table.length + '</td><td>' + item.betCv.toFixed(2) + '</td><td>' + item.entropy.toFixed(2) + '</td><td><strong class="' + cls + '">' + item.result + '</strong></td></tr>'; }).join('') + '</tbody></table></div>');
+   $('#signal-list').html('<div class="table-responsive"><table class="table table-striped table-hover player-analysis-table" id="dataTable"><thead><tr><th>Player ID</th><th>Signals</th><th>Session (min)</th><th>Rounds</th><th>Avg gap</th><th>Bets</th><th>Tables</th><th>Bet CV</th><th>Entropy</th><th>Robot</th></tr></thead><tbody class="robotTable">' + analyses.map(function(item){ const cls = item.result === 'YES' ? 'result-yes' : (item.result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no'); const tooltip = 'Matched: ' + item.matchedSignals.join(', ') + ' | Clear: ' + (item.missedSignals.join(', ') || 'none') + ' | Betting mechanism: ' + item.bettingMechanism + (item.highVariation ? ' | High betting variation' : ''); return '<tr><td>' + item.player.PlayerId + '</td><td><span>' + item.count + ' / 6</span><span class="signal-info" tabindex="0" data-tooltip="' + tooltip + '" aria-label="View matched signals">i</span></td><td>' + Math.round(item.player.sessionLenght || 0) + '</td><td>' + item.roundCount + '</td><td>' + item.avgGap.toFixed(2) + '</td><td>' + item.player.bet.length + '</td><td>' + item.player.table.length + '</td><td>' + item.betCv.toFixed(2) + '</td><td>' + item.entropy.toFixed(2) + '</td><td><strong class="' + cls + '">' + item.result + '</strong></td></tr>'; }).join('') + '</tbody></table></div>');
 }
 function Gettering(){
   
