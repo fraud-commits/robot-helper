@@ -1,0 +1,76 @@
+<html>
+
+<head>
+    <link rel="stylesheet" type="text/css"
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css">
+
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.9.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.1/css/jquery.dataTables.css">
+    
+</head>
+
+<body>
+    <div class="container">
+
+
+
+        <div class="table-responsive">
+            <table class="table-striped table table-hover table-roundTop" id="dataTable">
+                <thead>
+                    <tr>
+                        <th>Player Id</th>
+                        <th>Session Lenght(min)</th>
+                        <th>Round DCount</th>
+                        <th>AVG time between rounds</th>
+                        <th>Bet DCount</th>
+                        <th>Table DCount</th>
+                        <th>Entropy</th>
+                        <th>Roobot 1/0</th>
+                    
+                    </tr>
+                </thead>
+                <tbody class="robotTable ">
+
+                </tbody>
+            </table>
+        </div>
+        <button id="btnExportToCsv" type="button" class="button btn btn-dark">Export to CSV</button>
+    </div>
+
+       <script>
+        const dataTable = document.getElementById("dataTable");
+        const btnExportToCsv = document.getElementById("btnExportToCsv");
+
+        btnExportToCsv.addEventListener("click", () => {
+            const exporter = new TableCSVExporter(dataTable);
+            const csvOutput = exporter.convertToCSV();
+            const csvBlob = new Blob([csvOutput], { type: "text/csv" });
+            const blobUrl = URL.createObjectURL(csvBlob);
+            const anchorElement = document.createElement("a");
+
+            anchorElement.href = blobUrl;
+            anchorElement.download = "table-export.csv";
+            anchorElement.click();
+
+            setTimeout(() => {
+                URL.revokeObjectURL(blobUrl);
+            }, 500);
+        });
+    </script>
+
+
+</body>
+
+
+<script type="text/javascript" src="https://code.jquery.com/jquery-3.6.0.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.2.1/chart.min.js"></script>
+<script type="text/javascript" src="js/tableau-extensions-1.0.0.min.js"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js">
+</script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/moment.js/2.8.4/moment.js"></script>
+<script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.13.1/js/jquery.dataTables.js"></script>
+
+<script type="text/javascript" src="js/application.js"></script>
+
+</html>
