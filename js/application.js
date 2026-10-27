@@ -8,6 +8,8 @@ let valueColumnNumber = null;
 let refreshInProgress = false;
 let renderedPlayerIds = [];
 let parameterPollTimer = null;
+let lastPlayerData = [];
+let analysisSort = { key: 'result', direction: 'asc' };
 
 
 
@@ -20,6 +22,11 @@ $(document).ready(function () {
        drawChartJS();
        startPlayerParameterMonitor();
        $('#btn-refresh-player').on('click', refreshPlayerExtension);
+       $(document).on('click', '.player-analysis-table th[data-sort-key]', function(){
+          const key = $(this).data('sort-key');
+          analysisSort = { key: key, direction: analysisSort.key === key && analysisSort.direction === 'asc' ? 'desc' : 'asc' };
+          if(lastPlayerData.length) renderDetectionSummary(lastPlayerData);
+       });
       // Set up the Settings Event Listener.
       unregisterSettingsEventListener = tableau.extensions.settings.addEventListener(tableau.TableauEventType.SettingsChanged, (settingsEvent) => {
          // On settings change.
@@ -433,6 +440,7 @@ element.AvgGaps  = average;
 console.log(PlayerData)
 
 function renderDetectionSummary(playerData){
+  lastPlayerData = playerData || [];
   renderedPlayerIds = (playerData || []).map(function(player){ return player.PlayerId; });
   if(!playerData || !playerData.length){ $('#robot-view').prop('hidden', true); $('#empty-state').show(); return; }
   function parseTime(value){ const parsed = moment(String(value || ''), ['DD/MM/YYYY h:mm:ss A','DD/MM/YYYY HH:mm:ss','DD-MM-YYYY HH:mm a'], true); return parsed.isValid() ? parsed.valueOf() : NaN; }
@@ -487,13 +495,36 @@ function renderDetectionSummary(playerData){
     const previouslyReported = reportedMatch ? reportedMatch[1] + ' days ago' : 'NO';
     return { player: player, count: count, result: result, roundCount: roundTimes.length, avgGap: avgGapSec / 60, entropy: Number(player.entropy()) || 0, betCv: betCv, longPausePct: longPausePct, gapCv: gapCv, positionCount: player.bet.length, structurePct: structurePct, matchedSignals: matchedSignals, missedSignals: missedSignals, bettingMechanism: mechanismLabel, highVariation: highVariation, supportingCount: supportingCount, previouslyReported: previouslyReported };
   }
-  const analyses = playerData.map(analyze), yes = analyses.filter(function(item){ return item.result === 'YES'; }).length, suspicious = analyses.filter(function(item){ return item.result === 'SUSPICIOUS'; }).length, no = analyses.length - yes - suspicious;
+  const analyses = playerData.map(analyze).sort(function(a,b){
+    if(analysisSort.key === 'result'){
+      const rank = { YES: 0, SUSPICIOUS: 1, NO: 2 };
+      const resultDifference = rank[a.result] - rank[b.result];
+      if(resultDifference) return analysisSort.direction === 'asc' ? resultDifference : -resultDifference;
+      const signalDifference = b.count - a.count;
+      if(signalDifference) return signalDifference;
+      return String(a.player.PlayerId).localeCompare(String(b.player.PlayerId));
+    }
+    const values = {
+      player: [String(a.player.PlayerId), String(b.player.PlayerId)],
+      count: [a.count, b.count],
+      session: [a.player.sessionLenght || 0, b.player.sessionLenght || 0],
+      rounds: [a.roundCount, b.roundCount],
+      gap: [a.avgGap, b.avgGap],
+      bets: [a.player.bet.length, b.player.bet.length],
+      tables: [a.player.table.length, b.player.table.length],
+      betCv: [a.betCv, b.betCv],
+      entropy: [a.entropy, b.entropy],
+      reported: [a.previouslyReported, b.previouslyReported]
+    }[analysisSort.key] || [0, 0];
+    const difference = typeof values[0] === 'string' ? values[0].localeCompare(values[1]) : values[0] - values[1];
+    return analysisSort.direction === 'asc' ? difference : -difference;
+  }), yes = analyses.filter(function(item){ return item.result === 'YES'; }).length, suspicious = analyses.filter(function(item){ return item.result === 'SUSPICIOUS'; }).length, no = analyses.length - yes - suspicious;
   const totalSignals = analyses.reduce(function(sum,item){ return sum + item.count; },0);
   const summaryResult = yes ? 'YES' : (suspicious ? 'SUSPICIOUS' : 'NO');
   const summaryNote = analyses.length === 1 ? 'One player analysed' : (yes + ' YES · ' + suspicious + ' SUSPICIOUS · ' + no + ' NO');
   $('#robot-view').prop('hidden',false); $('#empty-state').hide(); $('#toolbar-player').text(analyses.length + (analyses.length === 1 ? ' PLAYER' : ' PLAYERS')); $('#session-stat').text(Math.round(Math.max.apply(null, analyses.map(function(item){ return item.player.sessionLenght || 0; }))) + ' MIN MAX'); $('#round-stat').text(analyses.reduce(function(sum,item){ return sum + item.roundCount; },0)); $('#gap-stat').text((analyses.reduce(function(sum,item){ return sum + item.avgGap; },0) / analyses.length).toFixed(2) + ' MIN AVG'); $('#signal-stat').text(totalSignals + ' / ' + (analyses.length * 6));
   $('#robot-result').text(analyses.length > 1 ? analyses.length + ' PLAYERS' : summaryResult).removeClass('result-no result-suspicious result-yes').addClass(summaryResult === 'YES' ? 'result-yes' : (summaryResult === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no')); $('#robot-result-note').text(summaryNote);
-   $('#signal-list').html('<div class="table-responsive"><table class="table table-striped table-hover player-analysis-table" id="dataTable"><thead><tr><th>Player ID</th><th>Signals</th><th>Session (min)</th><th>Rounds</th><th>Avg gap</th><th>Bets</th><th>Tables</th><th>Bet CV</th><th>Entropy</th><th>Reported?</th><th>Robot</th></tr></thead><tbody class="robotTable">' + analyses.map(function(item){ const cls = item.result === 'YES' ? 'result-yes' : (item.result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no'); const tooltip = 'Matched:\n' + (item.matchedSignals.join(' · ') || 'none') + '\n\nClear:\n' + (item.missedSignals.join(' · ') || 'none') + '\n\nMechanism:\n' + item.bettingMechanism + (item.highVariation ? '\nHigh betting variation' : ''); return '<tr><td>' + item.player.PlayerId + '</td><td><span>' + item.count + ' / 6</span><span class="signal-info" tabindex="0" data-tooltip="' + tooltip + '" aria-label="View matched signals">i</span></td><td>' + Math.round(item.player.sessionLenght || 0) + '</td><td>' + item.roundCount + '</td><td>' + item.avgGap.toFixed(2) + '</td><td>' + item.player.bet.length + '</td><td>' + item.player.table.length + '</td><td>' + item.betCv.toFixed(2) + '</td><td>' + item.entropy.toFixed(2) + '</td><td>' + item.previouslyReported + '</td><td><strong class="' + cls + '">' + item.result + '</strong></td></tr>'; }).join('') + '</tbody></table></div>');
+   $('#signal-list').html('<div class="table-responsive"><table class="table table-striped table-hover player-analysis-table" id="dataTable"><thead><tr><th data-sort-key="player">Player ID</th><th data-sort-key="count">Signals</th><th data-sort-key="session">Session (min)</th><th data-sort-key="rounds">Rounds</th><th data-sort-key="gap">Avg gap</th><th data-sort-key="bets">Bets</th><th data-sort-key="tables">Tables</th><th data-sort-key="betCv">Bet CV</th><th data-sort-key="entropy">Entropy</th><th data-sort-key="reported">Reported?</th><th data-sort-key="result">Robot</th></tr></thead><tbody class="robotTable">' + analyses.map(function(item){ const cls = item.result === 'YES' ? 'result-yes' : (item.result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no'); const tooltip = 'Matched:\n' + (item.matchedSignals.join(' · ') || 'none') + '\n\nClear:\n' + (item.missedSignals.join(' · ') || 'none') + '\n\nMechanism:\n' + item.bettingMechanism + (item.highVariation ? '\nHigh betting variation' : ''); return '<tr><td>' + item.player.PlayerId + '</td><td><span>' + item.count + ' / 6</span><span class="signal-info" tabindex="0" data-tooltip="' + tooltip + '" aria-label="View matched signals">i</span></td><td>' + Math.round(item.player.sessionLenght || 0) + '</td><td>' + item.roundCount + '</td><td>' + item.avgGap.toFixed(2) + '</td><td>' + item.player.bet.length + '</td><td>' + item.player.table.length + '</td><td>' + item.betCv.toFixed(2) + '</td><td>' + item.entropy.toFixed(2) + '</td><td>' + item.previouslyReported + '</td><td><strong class="' + cls + '">' + item.result + '</strong></td></tr>'; }).join('') + '</tbody></table></div>');
 }
 function Gettering(){
   
