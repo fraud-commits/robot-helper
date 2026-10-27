@@ -497,7 +497,7 @@ function renderDetectionSummary(playerData){
     const missedSignals = signalLabels.filter(function(label,index){ return !signals[index]; });
     const count = signals.filter(function(value){ return value; }).length;
     const supportingCount = [signals[0], signals[1], signals[2], signals[3], signals[5]].filter(function(value){ return value; }).length;
-    const result = bettingMechanism && supportingCount >= 3 && !highVariation ? 'YES' : ((count >= 2 || (signals[0] && !bettingMechanism) || highVariation) ? 'SUSPICIOUS' : 'NO');
+    const result = bettingMechanism && supportingCount >= 3 && !highVariation ? 'YES' : ((count >= 2 || (signals[0] && !bettingMechanism) || (highVariation && count >= 1)) ? 'SUSPICIOUS' : 'NO');
     const mechanismLabel = flatBetting ? 'Flat betting' : (repeatedSignature ? 'Repeated position + amount' : (progressivePattern ? 'Progressive sequence' : 'None detected'));
     const statusText = String(player.status || '');
     const reportedMatch = statusText.match(/ADVANTAGE\s+(\d+)\s+DAY(?:S)?\s+AGO/i);
