@@ -509,7 +509,8 @@ console.log(PlayerData)
 function renderDetectionSummary(playerData){
   lastPlayerData = playerData || [];
   renderedPlayerIds = (playerData || []).map(function(player){ return player.PlayerId; });
-  if(!playerData || !playerData.length){ $('#robot-view').prop('hidden', true); $('#empty-state').show(); return; }
+  if(!playerData || !playerData.length){ $('#robot-view').prop('hidden', true); $('#empty-state').show(); $('#initial-loading').prop('hidden', true); $('#no-player-state').prop('hidden', false); return; }
+  $('#initial-loading').prop('hidden', true); $('#no-player-state').prop('hidden', true);
   function parseTime(value){ const parsed = moment(String(value || ''), ['DD/MM/YYYY h:mm:ss A','DD/MM/YYYY HH:mm:ss','DD-MM-YYYY HH:mm a'], true); return parsed.isValid() ? parsed.valueOf() : NaN; }
   function analyze(player){
     const roundTimes = Object.keys(player.roundTimes || {}).map(function(key){ return parseTime(player.roundTimes[key]); }).filter(function(value){ return isFinite(value); }).sort(function(a,b){ return a-b; });
