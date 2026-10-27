@@ -489,7 +489,8 @@ function renderDetectionSummary(playerData){
     const progressivePattern = hasProgressivePattern();
     const flatBetting = amounts.length > 1 && betCv <= 0.10;
     const repeatedSignature = signaturePct >= 60;
-    const bettingMechanism = flatBetting || repeatedSignature || progressivePattern;
+    const repeatedRoundStructure = structurePct >= 80 && player.bet.length <= 6;
+    const bettingMechanism = flatBetting || repeatedSignature || progressivePattern || repeatedRoundStructure;
     const highVariation = betCv > 0.30 && Number(player.entropy()) > 2.50 && !progressivePattern && !repeatedSignature;
     const signalLabels = ['Long session','Rare long pauses','Stable rhythm','Bet Position pattern','Flat betting','Round structure'];
     const signals = [roundTimes.length > 500, longPausePct <= 2, gapCv <= 0.20, player.bet.length <= 6, amounts.length > 1 && betCv <= 0.10, structurePct >= 80];
@@ -498,7 +499,7 @@ function renderDetectionSummary(playerData){
     const count = signals.filter(function(value){ return value; }).length;
     const supportingCount = [signals[0], signals[1], signals[2], signals[3], signals[5]].filter(function(value){ return value; }).length;
     const result = bettingMechanism && supportingCount >= 3 && !highVariation ? 'YES' : ((count >= 2 || (signals[0] && !bettingMechanism) || (highVariation && count >= 1)) ? 'SUSPICIOUS' : 'NO');
-    const mechanismLabel = flatBetting ? 'Flat betting' : (repeatedSignature ? 'Repeated position + amount' : (progressivePattern ? 'Progressive sequence' : 'None detected'));
+    const mechanismLabel = flatBetting ? 'Flat betting' : (repeatedSignature ? 'Repeated position + amount' : (progressivePattern ? 'Progressive sequence' : (repeatedRoundStructure ? 'Repeated round structure' : 'None detected')));
     const statusText = String(player.status || '');
     const reportedMatch = statusText.match(/ADVANTAGE\s+(\d+)\s+DAY(?:S)?\s+AGO/i);
     const previouslyReported = reportedMatch ? reportedMatch[1] + ' days ago' : 'NO';
