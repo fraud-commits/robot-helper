@@ -476,7 +476,16 @@ function renderDetectionSummary(playerData){
     const amountMode = amounts.length ? Math.max.apply(null, Object.keys(amountGroups).map(function(key){ return amountGroups[key]; })) : 0;
     const amountModePct = amounts.length ? amountMode / amounts.length * 100 : 0;
     function hasProgressivePattern(){
-      if(amounts.length < 8) return false;
+      if(amounts.length < 10) return false;
+      const rounded = amounts.map(function(value){ return Math.round(value * 100) / 100; });
+      for(let period = 2; period <= 8; period++){
+        let matches = 0, comparisons = 0;
+        for(let i = period; i < rounded.length; i++){
+          comparisons++;
+          if(rounded[i] === rounded[i - period]) matches++;
+        }
+        if(comparisons >= 8 && matches / comparisons >= 0.75) return true;
+      }
       let longestRun = 1, run = 1, direction = 0;
       for(let i = 1; i < amounts.length; i++){
         const nextDirection = amounts[i] === amounts[i - 1] ? 0 : (amounts[i] > amounts[i - 1] ? 1 : -1);
@@ -484,7 +493,7 @@ function renderDetectionSummary(playerData){
         if(nextDirection) direction = nextDirection; else direction = 0;
         if(run > longestRun) longestRun = run;
       }
-      return longestRun >= 5;
+      return longestRun >= 8;
     }
     const progressivePattern = hasProgressivePattern();
     const flatBetting = amounts.length > 1 && betCv <= 0.10;
