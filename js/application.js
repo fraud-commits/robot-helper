@@ -23,6 +23,8 @@ $(document).ready(function () {
        startPlayerParameterMonitor();
        $('#btn-refresh-player').on('click', refreshPlayerExtension);
        $('#player-search').on('input', filterPlayerRows);
+       $(document).on('mouseenter focusin', '.signal-info', function(){ showSignalTooltip(this); });
+       $(document).on('mouseleave focusout', '.signal-info', hideSignalTooltip);
        $(document).on('click', '.player-analysis-table th[data-sort-key]', function(){
           const key = $(this).data('sort-key');
           analysisSort = { key: key, direction: analysisSort.key === key && analysisSort.direction === 'asc' ? 'desc' : 'asc' };
@@ -101,6 +103,37 @@ function filterPlayerRows(){
     const playerId = String($(this).children('td').first().text() || '').toLowerCase();
     $(this).toggle(!query || playerId.indexOf(query) !== -1);
   });
+}
+
+let signalTooltipTimer = null;
+function showSignalTooltip(element){
+  clearTimeout(signalTooltipTimer);
+  let tooltip = document.getElementById('signal-tooltip-floating');
+  if(!tooltip){
+    tooltip = document.createElement('div');
+    tooltip.id = 'signal-tooltip-floating';
+    tooltip.className = 'signal-tooltip-floating';
+    document.body.appendChild(tooltip);
+  }
+  tooltip.textContent = element.getAttribute('data-tooltip') || '';
+  tooltip.hidden = false;
+  const rect = element.getBoundingClientRect();
+  const margin = 8;
+  const tooltipRect = tooltip.getBoundingClientRect();
+  let left = rect.left;
+  let top = rect.bottom + margin;
+  if(top + tooltipRect.height > window.innerHeight - margin) top = rect.top - tooltipRect.height - margin;
+  if(left + tooltipRect.width > window.innerWidth - margin) left = window.innerWidth - tooltipRect.width - margin;
+  if(left < margin) left = margin;
+  if(top < margin) top = margin;
+  tooltip.style.left = left + 'px';
+  tooltip.style.top = top + 'px';
+}
+function hideSignalTooltip(){
+  signalTooltipTimer = setTimeout(function(){
+    const tooltip = document.getElementById('signal-tooltip-floating');
+    if(tooltip) tooltip.hidden = true;
+  }, 80);
 }
 
 
