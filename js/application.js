@@ -51,13 +51,19 @@ function isPlayerId(value){
   return /^\d{4,}$/.test(value) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
+function isPlayerSelectorName(value){
+  const name = String(value || '').toLowerCase();
+  if(!/(player|user)/.test(name)) return false;
+  const compact = name.replace(/[^a-z0-9]/g, '');
+  return /^(player|user)$/.test(compact) || /(player|user)(id|filter|selector|parameter|tf)/.test(compact);
+}
+
 function getSelectedPlayerId(){
   const dashboard = tableau.extensions.dashboardContent.dashboard;
   if(!dashboard) return Promise.resolve([]);
   const parameterIds = dashboard.getParametersAsync ? dashboard.getParametersAsync().then(function(parameters){
     const parameterValues = (parameters || []).filter(function(item){
-      const name = String(item.name || '').toLowerCase();
-      return /(player|user)/.test(name) && /(id|filter)/.test(name);
+      return isPlayerSelectorName(item.name);
     }).map(function(parameter){
       const currentValue = parameter.currentValue;
       return normalizePlayerId(currentValue && (currentValue.value != null ? currentValue.value : currentValue.formattedValue));
@@ -69,8 +75,7 @@ function getSelectedPlayerId(){
   if(!playerWorksheet || !playerWorksheet.getFiltersAsync) return parameterIds;
   return playerWorksheet.getFiltersAsync().then(function(filters){
     const playerFilter = (filters || []).find(function(filter){
-      const name = String(filter.fieldName || filter.fieldCaption || '').toLowerCase();
-      return /(player|user)/.test(name) && /(id|filter)/.test(name);
+      return isPlayerSelectorName(filter.fieldName || filter.fieldCaption);
     });
     if(!playerFilter || playerFilter.isAllSelected) return [];
     const values = playerFilter.appliedValues || playerFilter.values || [];
