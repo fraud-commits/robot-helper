@@ -514,11 +514,22 @@ function renderDetectionSummary(playerData){
   function parseTime(value){ const parsed = moment(String(value || ''), ['DD/MM/YYYY h:mm:ss A','DD/MM/YYYY HH:mm:ss','DD-MM-YYYY HH:mm a'], true); return parsed.isValid() ? parsed.valueOf() : NaN; }
   function analyze(player){
     const roundTimes = Object.keys(player.roundTimes || {}).map(function(key){ return parseTime(player.roundTimes[key]); }).filter(function(value){ return isFinite(value); }).sort(function(a,b){ return a-b; });
-    const gaps = []; for(let i=1;i<roundTimes.length;i++){ gaps.push((roundTimes[i] - roundTimes[i-1]) / 1000); }
-    const avgGapSec = gaps.length ? gaps.reduce(function(sum,value){ return sum + value; },0) / gaps.length : 0;
-    const gapSd = gaps.length ? Math.sqrt(gaps.reduce(function(sum,value){ return sum + Math.pow(value - avgGapSec, 2); },0) / gaps.length) : 0;
+    const sessionBreakSec = 6 * 60 * 60;
+    const sessions = [];
+    roundTimes.forEach(function(time){
+      const current = sessions[sessions.length - 1];
+      if(!current || time - current[current.length - 1] > sessionBreakSec * 1000) sessions.push([time]);
+      else current.push(time);
+    });
+    const sessionGaps = [];
+    sessions.forEach(function(session){ for(let i=1;i<session.length;i++) sessionGaps.push((session[i] - session[i-1]) / 1000); });
+    const avgGapSec = sessionGaps.length ? sessionGaps.reduce(function(sum,value){ return sum + value; },0) / sessionGaps.length : 0;
+    const gapSd = sessionGaps.length ? Math.sqrt(sessionGaps.reduce(function(sum,value){ return sum + Math.pow(value - avgGapSec, 2); },0) / sessionGaps.length) : 0;
     const gapCv = avgGapSec ? gapSd / avgGapSec : 0;
-    const longPausePct = gaps.length ? gaps.filter(function(value){ return value > 120; }).length / gaps.length * 100 : 0;
+    const longPausePct = sessionGaps.length ? sessionGaps.filter(function(value){ return value > 120; }).length / sessionGaps.length * 100 : 0;
+    const maxSession = sessions.reduce(function(longest, session){ return session.length > longest.length ? session : longest; }, []);
+    const maxSessionMinutes = maxSession.length > 1 ? (maxSession[maxSession.length - 1] - maxSession[0]) / 60000 : 0;
+    const activeDays = new Set(roundTimes.map(function(time){ return new Date(time).toLocaleDateString(); })).size;
     const records = (player.betRecords || []).map(function(record){ const text = String(record.amount || '').replace(/[^0-9.,-]/g, '').replace(',', '.'); const amount = parseFloat(text); return { position: record.position, amount: amount, key: record.position + '|' + (isFinite(amount) ? amount : '') }; }).filter(function(record){ return record.amount > 0; });
     const amounts = records.map(function(record){ return record.amount; });
     const amountMean = amounts.length ? amounts.reduce(function(sum,value){ return sum + value; },0) / amounts.length : 0;
@@ -561,7 +572,7 @@ function renderDetectionSummary(playerData){
     const bettingMechanism = flatBetting || repeatedSignature || progressivePattern || repeatedRoundStructure;
     const highVariation = betCv > 0.30 && Number(player.entropy()) > 2.50;
     const signalLabels = ['Long session','Rare long pauses','Stable rhythm','Bet Position pattern','Flat betting','Round structure'];
-    const signals = [roundTimes.length > 500, longPausePct <= 2, gapCv <= 0.20, player.bet.length <= 6, amounts.length > 1 && betCv <= 0.10, structurePct >= 80];
+    const signals = [maxSession.length > 500, longPausePct <= 2, gapCv <= 0.20, player.bet.length <= 6, amounts.length > 1 && betCv <= 0.10, structurePct >= 80];
     const matchedSignals = signalLabels.filter(function(label,index){ return signals[index]; });
     const missedSignals = signalLabels.filter(function(label,index){ return !signals[index]; });
     const count = signals.filter(function(value){ return value; }).length;
@@ -571,7 +582,7 @@ function renderDetectionSummary(playerData){
     const statusText = String(player.status || '');
     const reportedMatch = statusText.match(/ADVANTAGE\s+(\d+)\s+DAY(?:S)?\s+AGO/i);
     const previouslyReported = reportedMatch ? reportedMatch[1] + ' days ago' : 'NO';
-    return { player: player, count: count, result: result, roundCount: roundTimes.length, avgGap: avgGapSec / 60, entropy: Number(player.entropy()) || 0, betCv: betCv, longPausePct: longPausePct, gapCv: gapCv, positionCount: player.bet.length, structurePct: structurePct, matchedSignals: matchedSignals, missedSignals: missedSignals, bettingMechanism: mechanismLabel, highVariation: highVariation, supportingCount: supportingCount, previouslyReported: previouslyReported };
+    return { player: player, count: count, result: result, roundCount: roundTimes.length, activeDays: activeDays, maxSessionMinutes: maxSessionMinutes, maxSessionRounds: maxSession.length, avgGap: avgGapSec / 60, entropy: Number(player.entropy()) || 0, betCv: betCv, longPausePct: longPausePct, gapCv: gapCv, positionCount: player.bet.length, structurePct: structurePct, matchedSignals: matchedSignals, missedSignals: missedSignals, bettingMechanism: mechanismLabel, highVariation: highVariation, supportingCount: supportingCount, previouslyReported: previouslyReported };
   }
   const analyses = playerData.map(analyze).sort(function(a,b){
     if(analysisSort.key === 'result'){
@@ -585,7 +596,8 @@ function renderDetectionSummary(playerData){
     const values = {
       player: [String(a.player.PlayerId), String(b.player.PlayerId)],
       count: [a.count, b.count],
-      session: [a.player.sessionLenght || 0, b.player.sessionLenght || 0],
+      session: [a.maxSessionMinutes, b.maxSessionMinutes],
+      activeDays: [a.activeDays, b.activeDays],
       rounds: [a.roundCount, b.roundCount],
       gap: [a.avgGap, b.avgGap],
       bets: [a.player.bet.length, b.player.bet.length],
@@ -600,9 +612,9 @@ function renderDetectionSummary(playerData){
   const totalSignals = analyses.reduce(function(sum,item){ return sum + item.count; },0);
   const summaryResult = yes ? 'YES' : (suspicious ? 'SUSPICIOUS' : 'NO');
   const summaryNote = analyses.length === 1 ? 'One player analysed' : (yes + ' YES · ' + suspicious + ' SUSPICIOUS · ' + no + ' NO');
-  $('#robot-view').prop('hidden',false); $('#empty-state').hide(); $('#toolbar-player').text(analyses.length + (analyses.length === 1 ? ' PLAYER' : ' PLAYERS')); $('#session-stat').text(Math.round(Math.max.apply(null, analyses.map(function(item){ return item.player.sessionLenght || 0; }))) + ' MIN MAX'); $('#round-stat').text(analyses.reduce(function(sum,item){ return sum + item.roundCount; },0)); $('#gap-stat').text((analyses.reduce(function(sum,item){ return sum + item.avgGap; },0) / analyses.length).toFixed(2) + ' MIN AVG'); $('#signal-stat').text(totalSignals + ' / ' + (analyses.length * 6));
+   $('#robot-view').prop('hidden',false); $('#empty-state').hide(); $('#toolbar-player').text(analyses.length + (analyses.length === 1 ? ' PLAYER' : ' PLAYERS')); $('#session-stat').text(Math.round(Math.max.apply(null, analyses.map(function(item){ return item.maxSessionMinutes; }))) + ' MIN MAX'); $('#round-stat').text(analyses.reduce(function(sum,item){ return sum + item.roundCount; },0)); $('#gap-stat').text((analyses.reduce(function(sum,item){ return sum + item.avgGap; },0) / analyses.length).toFixed(2) + ' MIN AVG'); $('#signal-stat').text(totalSignals + ' / ' + (analyses.length * 6));
   $('#robot-result').text(analyses.length > 1 ? analyses.length + ' PLAYERS' : summaryResult).removeClass('result-no result-suspicious result-yes').addClass(summaryResult === 'YES' ? 'result-yes' : (summaryResult === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no')); $('#robot-result-note').text(summaryNote);
-   $('#signal-list').html('<div class="table-responsive"><table class="table table-striped table-hover player-analysis-table" id="dataTable"><thead><tr><th data-sort-key="player">Player ID</th><th data-sort-key="count">Signals</th><th data-sort-key="session">Session (min)</th><th data-sort-key="rounds">Rounds</th><th data-sort-key="gap">Avg gap</th><th data-sort-key="bets">Bets</th><th data-sort-key="tables">Tables</th><th data-sort-key="betCv">Bet CV</th><th data-sort-key="entropy">Entropy</th><th data-sort-key="reported">Reported?</th><th data-sort-key="result">Robot</th></tr></thead><tbody class="robotTable">' + analyses.map(function(item){ const cls = item.result === 'YES' ? 'result-yes' : (item.result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no'); const tooltip = 'Matched:\n' + (item.matchedSignals.join(' · ') || 'none') + '\n\nNot matched:\n' + (item.missedSignals.join(' · ') || 'none') + '\n\nMechanism:\n' + item.bettingMechanism + (item.highVariation ? '\nHigh betting variation' : ''); return '<tr><td>' + item.player.PlayerId + '</td><td><span>' + item.count + ' / 6</span><span class="signal-info" tabindex="0" data-tooltip="' + tooltip + '" aria-label="View matched signals">i</span></td><td>' + Math.round(item.player.sessionLenght || 0) + '</td><td>' + item.roundCount + '</td><td>' + item.avgGap.toFixed(2) + '</td><td>' + item.player.bet.length + '</td><td>' + item.player.table.length + '</td><td>' + item.betCv.toFixed(2) + '</td><td>' + item.entropy.toFixed(2) + '</td><td>' + item.previouslyReported + '</td><td><strong class="' + cls + '">' + item.result + '</strong></td></tr>'; }).join('') + '</tbody></table></div>');
+   $('#signal-list').html('<div class="table-responsive"><table class="table table-striped table-hover player-analysis-table" id="dataTable"><thead><tr><th data-sort-key="player">Player ID</th><th data-sort-key="count">Signals</th><th data-sort-key="session">Max session (min)</th><th data-sort-key="activeDays">Active days</th><th data-sort-key="rounds">Rounds</th><th data-sort-key="gap">Avg gap</th><th data-sort-key="bets">Bets</th><th data-sort-key="tables">Tables</th><th data-sort-key="betCv">Bet CV</th><th data-sort-key="entropy">Entropy</th><th data-sort-key="reported">Reported?</th><th data-sort-key="result">Robot</th></tr></thead><tbody class="robotTable">' + analyses.map(function(item){ const cls = item.result === 'YES' ? 'result-yes' : (item.result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no'); const tooltip = 'Matched:\n' + (item.matchedSignals.join(' · ') || 'none') + '\n\nNot matched:\n' + (item.missedSignals.join(' · ') || 'none') + '\n\nMechanism:\n' + item.bettingMechanism + (item.highVariation ? '\nHigh betting variation' : ''); return '<tr><td>' + item.player.PlayerId + '</td><td><span>' + item.count + ' / 6</span><span class="signal-info" tabindex="0" data-tooltip="' + tooltip + '" aria-label="View matched signals">i</span></td><td>' + Math.round(item.maxSessionMinutes) + '</td><td>' + item.activeDays + '</td><td>' + item.roundCount + '</td><td>' + item.avgGap.toFixed(2) + '</td><td>' + item.player.bet.length + '</td><td>' + item.player.table.length + '</td><td>' + item.betCv.toFixed(2) + '</td><td>' + item.entropy.toFixed(2) + '</td><td>' + item.previouslyReported + '</td><td><strong class="' + cls + '">' + item.result + '</strong></td></tr>'; }).join('') + '</tbody></table></div>');
    filterPlayerRows();
 }
 function Gettering(){
