@@ -6,12 +6,12 @@
   <title>Robot Helper</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.9.1/font/bootstrap-icons.css">
-  <link rel="stylesheet" href="style.css?v=20261027-15">
+  <link rel="stylesheet" href="style.css?v=20261027-16">
 </head>
 <body>
   <main class="robot-shell">
-    <header class="robot-header"><div class="robot-brand"><i class="bi bi-people-fill brand-mark" aria-hidden="true"></i> ROBOT HELPER</div><div class="robot-version">HELPER v2026-10-27-15</div></header>
-    <div class="toolbar"><span class="toolbar-label">PLAYER</span><span class="toolbar-value" id="toolbar-player">—</span><span class="toolbar-label">WORKSHEET</span><span class="toolbar-value">fraud2</span><span class="toolbar-label">DATA</span><span class="toolbar-value">FILTERED SUMMARY</span></div>
+    <header class="robot-header"><div class="robot-brand"><i class="bi bi-people-fill brand-mark" aria-hidden="true"></i> ROBOT HELPER</div><div class="robot-version">HELPER v2026-10-27-16</div></header>
+    <div class="toolbar"><span class="toolbar-label">PLAYER</span><span class="toolbar-value" id="toolbar-player">—</span></div>
     <section class="robot-content">
       <div id="empty-state" class="empty-state"><i class="bi bi-person-plus"></i><h2>Select a player in Tableau</h2><p>The Robot Detection analysis will appear here.</p></div>
       <div id="robot-view" hidden><div class="stat-pills"><span class="stat-pill">SESSION: <b id="session-stat">0 MIN</b></span><span class="stat-pill">ROUNDS: <b id="round-stat">0</b></span><span class="stat-pill">AVG GAP: <b id="gap-stat">0 MIN</b></span><span class="stat-pill">SIGNALS: <b id="signal-stat">0 / 6</b></span></div>
@@ -24,7 +24,7 @@
   <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.8.4/moment.js"></script>
   <script src="js/tableau-extensions-1.0.0.min.js"></script>
-  <script src="js/application.js?v=20261027-15"></script>
+  <script src="js/application.js?v=20261027-16"></script>
   <script>const btnExportToCsv=document.getElementById("btnExportToCsv");if(btnExportToCsv)btnExportToCsv.addEventListener("click",()=>{const dataTable=document.getElementById("dataTable");if(!dataTable)return;const e=new TableCSVExporter(dataTable),c=e.convertToCSV(),b=new Blob([c],{type:"text/csv"}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download="robot-detection.csv";a.click();setTimeout(()=>URL.revokeObjectURL(u),500)});</script>
 </body>
 </html>
