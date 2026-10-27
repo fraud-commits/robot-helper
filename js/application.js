@@ -338,14 +338,21 @@ console.log(PlayerData)
 
 function renderDetectionSummary(playerData){
   if(!playerData || !playerData.length){ $('#robot-view').prop('hidden', true); $('#empty-state').show(); return; }
-  const player = playerData[0], roundCount = player.RoundCount.length, avgGap = Number(player.AvgGaps) || 0, entropy = Number(player.entropy()) || 0;
-  const signals = [['Long session', roundCount > 300, roundCount + ' rounds'],['Fast / stable pace', avgGap <= 1, avgGap.toFixed(2) + ' min average gap'],['Repeated bet positions', player.bet.length <= 1, player.bet.length + ' bet types'],['Low bet variation', entropy < 2.5, 'entropy ' + entropy.toFixed(2)],['Few meaningful breaks', player.gaps.length ? player.gaps.filter(function(gap){return Number(gap) > 3;}).length === 0 : true, 'break pattern'],['Table concentration', player.table.length <= 1, player.table.length + ' table(s)']];
-  const signalCount = signals.filter(function(signal){return signal[1];}).length, result = signalCount >= 3 ? 'YES' : (signalCount === 2 ? 'SUSPICIOUS' : 'NO'), note = result === 'YES' ? 'Several mechanical behaviour signals detected' : (result === 'SUSPICIOUS' ? 'Some signals require further review' : 'No strong automation pattern detected');
-  $('#robot-view').prop('hidden', false); $('#empty-state').hide(); $('#toolbar-player').text(player.PlayerId || '—'); $('#session-stat').text(Math.round(player.sessionLenght || 0) + ' MIN'); $('#round-stat').text(roundCount); $('#gap-stat').text(avgGap.toFixed(2) + ' MIN'); $('#signal-stat').text(signalCount + ' / 6');
-  $('#robot-result').text(result).removeClass('result-no result-suspicious result-yes').addClass(result === 'YES' ? 'result-yes' : (result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no')); $('#robot-result-note').text(note);
-  $('#signal-list').html(signals.map(function(signal){return '<div class="signal-row"><span class="signal-dot ' + (signal[1] ? 'signal-on' : 'signal-off') + '"></span><span class="signal-name">' + signal[0] + '</span><span class="signal-detail">' + signal[2] + '</span><strong class="signal-state">' + (signal[1] ? 'SIGNAL' : 'CLEAR') + '</strong></div>';}).join(''));
+  function analyze(player){
+    const roundCount = player.RoundCount.length, avgGap = Number(player.AvgGaps) || 0, entropy = Number(player.entropy()) || 0;
+    const signals = [roundCount > 300, avgGap <= 1, player.bet.length <= 1, entropy < 2.5, player.gaps.length ? player.gaps.filter(function(gap){ return Number(gap) > 3; }).length === 0 : true, player.table.length <= 1];
+    const count = signals.filter(function(value){ return value; }).length;
+    const result = count >= 3 ? 'YES' : (count === 2 ? 'SUSPICIOUS' : 'NO');
+    return { player: player, count: count, result: result, signals: signals, roundCount: roundCount, avgGap: avgGap, entropy: entropy };
+  }
+  const analyses = playerData.map(analyze), yes = analyses.filter(function(item){ return item.result === 'YES'; }).length, suspicious = analyses.filter(function(item){ return item.result === 'SUSPICIOUS'; }).length, no = analyses.length - yes - suspicious;
+  const totalSignals = analyses.reduce(function(sum, item){ return sum + item.count; }, 0);
+  const summaryResult = yes ? 'YES' : (suspicious ? 'SUSPICIOUS' : 'NO');
+  const summaryNote = analyses.length === 1 ? 'One player analysed' : (yes + ' YES · ' + suspicious + ' SUSPICIOUS · ' + no + ' NO');
+  $('#robot-view').prop('hidden', false); $('#empty-state').hide(); $('#toolbar-player').text(analyses.length + (analyses.length === 1 ? ' PLAYER' : ' PLAYERS')); $('#session-stat').text(Math.round(Math.max.apply(null, analyses.map(function(item){ return item.player.sessionLenght || 0; }))) + ' MIN MAX'); $('#round-stat').text(analyses.reduce(function(sum, item){ return sum + item.roundCount; }, 0)); $('#gap-stat').text((analyses.reduce(function(sum, item){ return sum + item.avgGap; }, 0) / analyses.length).toFixed(2) + ' MIN AVG'); $('#signal-stat').text(totalSignals + ' / ' + (analyses.length * 6));
+  $('#robot-result').text(analyses.length > 1 ? analyses.length + ' PLAYERS' : summaryResult).removeClass('result-no result-suspicious result-yes').addClass(summaryResult === 'YES' ? 'result-yes' : (summaryResult === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no')); $('#robot-result-note').text(summaryNote);
+  $('#signal-list').html(analyses.map(function(item){ const active = item.count >= 3 ? 'signal-on' : (item.count === 2 ? 'signal-review' : 'signal-off'); const cls = item.result === 'YES' ? 'result-yes' : (item.result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no'); return '<div class="signal-row player-signal-row"><span class="signal-dot ' + active + '"></span><span class="signal-name">' + item.player.PlayerId + '</span><span class="signal-detail">' + item.count + ' / 6 signals · ' + item.roundCount + ' rounds · entropy ' + item.entropy.toFixed(2) + '</span><strong class="signal-state ' + cls + '">' + item.result + '</strong></div>'; }).join(''));
 }
-
 function Gettering(){
   
   let robot;
