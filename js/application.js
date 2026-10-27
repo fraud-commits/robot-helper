@@ -39,7 +39,9 @@ $(document).ready(function () {
 
 function normalizePlayerId(value){
   const text = String(value == null ? '' : value).trim();
-  const ids = text.match(/\d{4,}/g);
+  const candidate = text.indexOf(':') >= 0 ? text.split(':').pop().trim() : text;
+  if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate)) return candidate.toLowerCase();
+  const ids = candidate.match(/\d{4,}/g);
   return ids && ids.length ? ids[ids.length - 1] : text.toLowerCase();
 }
 
