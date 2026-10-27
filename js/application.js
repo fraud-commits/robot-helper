@@ -122,8 +122,26 @@ function drawChartJS() {
            let RatioArry= [];
            let PlayerData = [];
 
-            let totaltest = 0;
-            var worksheetData = sumdata.data;
+             let totaltest = 0;
+             var worksheetData = sumdata.data;
+             const columnLabels = (sumdata.columns || []).map(function(column){ return String(column.fieldName || column.fieldCaption || column.caption || '').toLowerCase(); });
+             function findColumn(words, fallback){
+               const found = columnLabels.findIndex(function(label){ return words.every(function(word){ return label.indexOf(word) !== -1; }); });
+               return found >= 0 ? found : fallback;
+             }
+             const dataColumns = {
+               player: findColumn(['player','id'], 0),
+               time: findColumn(['round','time'], 1),
+               round: findColumn(['round','id'], 2),
+               table: findColumn(['table','id'], 3),
+               position: findColumn(['bet','position'], 4),
+               bet: findColumn(['bet','eur'], 5),
+               status: findColumn(['status'], 7)
+             };
+             function valueAt(row, name){
+               const cell = worksheetData[row] && worksheetData[row][dataColumns[name]];
+               return cell ? cell.formattedValue : '';
+             }
      
             let DealerArry =[];
             let BetPositionArry =[];
@@ -176,14 +194,14 @@ function RoundTotla(indexStart,indexNext){
  
 
 
-  let index = PlayerData.findIndex(object => object.PlayerId === worksheetData[indexStart][0].formattedValue);
+  let index = PlayerData.findIndex(object => object.PlayerId === valueAt(indexStart, 'player'));
 
 
   if (index === -1) {
 
     PlayerData.push({
-      PlayerId: worksheetData[indexStart][0].formattedValue,
-      status: worksheetData[indexStart][7].formattedValue,
+      PlayerId: valueAt(indexStart, 'player'),
+      status: valueAt(indexStart, 'status'),
       table:  [],
       bet: [],
       time: [],
@@ -271,18 +289,18 @@ function RoundTotla(indexStart,indexNext){
 
   let RoundTime = 1;
 
-  let element = PlayerData.find(e => e.PlayerId === worksheetData[indexStart][0].formattedValue);
+  let element = PlayerData.find(e => e.PlayerId === valueAt(indexStart, 'player'));
   
   //alert(element.RoundCount)
   if (element) {
     
    
-     element.BetAmount.push(worksheetData[indexStart][5].formattedValue)
-     element.status = worksheetData[indexStart][7].formattedValue;
-     element.betRecords.push({ position: String(worksheetData[indexStart][4].formattedValue || ''), amount: worksheetData[indexStart][5].formattedValue });
-     let roundKey = String(worksheetData[indexStart][2].formattedValue || '');
+     element.BetAmount.push(valueAt(indexStart, 'bet'))
+     element.status = valueAt(indexStart, 'status');
+     element.betRecords.push({ position: String(valueAt(indexStart, 'position') || ''), amount: valueAt(indexStart, 'bet') });
+     let roundKey = String(valueAt(indexStart, 'round') || '');
      element.roundBetCounts[roundKey] = (element.roundBetCounts[roundKey] || 0) + 1;
-     element.roundTimes[roundKey] = worksheetData[indexStart][1].formattedValue;
+     element.roundTimes[roundKey] = valueAt(indexStart, 'time');
  //   element.TotalRoundBet += worksheetData[indexStart][BetEUR].value;
   //  element.TotalRoundNet += worksheetData[indexStart][NetEUR].value;
        // element.table.push(worksheetData[indexStart][3].formattedValue)
@@ -291,27 +309,27 @@ function RoundTotla(indexStart,indexNext){
 
 
 
-  if (!element.table.includes(worksheetData[indexStart][3].formattedValue)) {
-          element.table.push(worksheetData[indexStart][3].formattedValue);
+   if (!element.table.includes(valueAt(indexStart, 'table'))) {
+           element.table.push(valueAt(indexStart, 'table'));
     }
-  if (!element.bet.includes(worksheetData[indexStart][4].formattedValue)) {
-        element.bet.push(worksheetData[indexStart][4].formattedValue);
+   if (!element.bet.includes(valueAt(indexStart, 'position'))) {
+         element.bet.push(valueAt(indexStart, 'position'));
     }
       
-  if (!element.time.includes(worksheetData[indexStart][1].formattedValue)) {
-      element.time.push(worksheetData[indexStart][1].formattedValue);
+   if (!element.time.includes(valueAt(indexStart, 'time'))) {
+       element.time.push(valueAt(indexStart, 'time'));
     }
 
-  if (!element.RoundCount.includes(worksheetData[indexStart][2].formattedValue)) {
-    element.RoundCount.push(worksheetData[indexStart][2].formattedValue);
+   if (!element.RoundCount.includes(valueAt(indexStart, 'round'))) {
+     element.RoundCount.push(valueAt(indexStart, 'round'));
     }
     
 
 
   
 
-  var startTime=moment(worksheetData[indexStart][1].formattedValue, "DD-MM-YYYY HH:mm a");
-  var endTime=moment(worksheetData[indexNext][1].formattedValue, "DD-MM-YYYY HH:mm a");
+  var startTime=moment(valueAt(indexStart, 'time'), "DD-MM-YYYY HH:mm a");
+  var endTime=moment(valueAt(indexNext, 'time'), "DD-MM-YYYY HH:mm a");
   var duration = moment.duration(endTime.diff(startTime));
   var hours = parseInt(duration.asHours());
   var minutes = parseInt(duration.asMinutes())-hours*60;
