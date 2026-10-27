@@ -129,14 +129,17 @@ function drawChartJS() {
                const found = columnLabels.findIndex(function(label){ return words.every(function(word){ return label.indexOf(word) !== -1; }); });
                return found >= 0 ? found : fallback;
              }
+             function orderedColumn(position, words){
+               return worksheetData.some(function(row){ return row && row[position]; }) ? position : findColumn(words, position);
+             }
              const dataColumns = {
-               player: findColumn(['player','id'], 0),
-               time: findColumn(['round','time'], 1),
-               round: findColumn(['round','id'], 2),
-               table: findColumn(['table','id'], 3),
-               position: findColumn(['bet','position'], 4),
-               bet: findColumn(['bet','eur'], 5),
-               status: findColumn(['status'], 7)
+               player: orderedColumn(0, ['player','id']),
+               time: orderedColumn(1, ['round','time']),
+               round: orderedColumn(2, ['round','id']),
+               table: orderedColumn(3, ['table','id']),
+               position: orderedColumn(4, ['bet','position']),
+               bet: orderedColumn(5, ['bet','eur']),
+               status: orderedColumn(7, ['status'])
              };
              function valueAt(row, name){
                const cell = worksheetData[row] && worksheetData[row][dataColumns[name]];
