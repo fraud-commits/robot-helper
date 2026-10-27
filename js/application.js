@@ -53,8 +53,8 @@ function isPlayerId(value){
 
 function getSelectedPlayerId(){
   const dashboard = tableau.extensions.dashboardContent.dashboard;
-  if(!dashboard || !dashboard.getParametersAsync) return Promise.resolve('');
-  return dashboard.getParametersAsync().then(function(parameters){
+  if(!dashboard) return Promise.resolve([]);
+  const parameterIds = dashboard.getParametersAsync ? dashboard.getParametersAsync().then(function(parameters){
     const parameterValues = (parameters || []).filter(function(item){
       const name = String(item.name || '').toLowerCase();
       return /(player|user)/.test(name) && /(id|filter)/.test(name);
@@ -63,7 +63,19 @@ function getSelectedPlayerId(){
       return normalizePlayerId(currentValue && (currentValue.value != null ? currentValue.value : currentValue.formattedValue));
     }).filter(isPlayerId);
     return parameterValues;
-  }).catch(function(){ return ''; });
+  }).catch(function(){ return []; }) : Promise.resolve([]);
+  const worksheets = dashboard.worksheets || [];
+  const playerWorksheet = worksheets.find(function(sheet){ return sheet.name === 'fraud2'; }) || worksheets[0];
+  if(!playerWorksheet || !playerWorksheet.getFiltersAsync) return parameterIds;
+  return playerWorksheet.getFiltersAsync().then(function(filters){
+    const playerFilter = (filters || []).find(function(filter){
+      const name = String(filter.fieldName || filter.fieldCaption || '').toLowerCase();
+      return /(player|user)/.test(name) && /(id|filter)/.test(name);
+    });
+    if(!playerFilter || playerFilter.isAllSelected) return [];
+    const values = playerFilter.appliedValues || playerFilter.values || [];
+    return values.map(function(item){ return normalizePlayerId(item && (item.value != null ? item.value : item.formattedValue || item)); }).filter(isPlayerId);
+  }).catch(function(){ return parameterIds; });
 }
 
 function updatePlayerRefreshState(selectedId){

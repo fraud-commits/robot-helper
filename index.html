@@ -10,7 +10,7 @@
 </head>
 <body>
   <main class="robot-shell">
-    <header class="robot-header"><div class="robot-brand"><i class="bi bi-people-fill brand-mark" aria-hidden="true"></i> ROBOT HELPER</div><div class="robot-version">HELPER v2026-10-27-47</div></header>
+    <header class="robot-header"><div class="robot-brand"><i class="bi bi-people-fill brand-mark" aria-hidden="true"></i> ROBOT HELPER</div><div class="robot-version">HELPER v2026-10-27-48</div></header>
     <div class="toolbar"><span class="toolbar-label">PLAYER</span><span class="toolbar-value" id="toolbar-player">—</span><label class="player-search"><i class="bi bi-search" aria-hidden="true"></i><input id="player-search" type="search" placeholder="Search Player ID" aria-label="Search Player ID"></label><button id="btn-refresh-player" type="button" class="refresh-player-btn" aria-label="Refresh player data" data-refresh-tooltip="Refresh extension data"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i><span>Refresh</span></button></div>
     <section class="robot-content">
       <div id="empty-state" class="empty-state"><i class="bi bi-person-plus"></i><h2>Select a player in Tableau</h2><p>The Robot Detection analysis will appear here.</p></div>
@@ -25,7 +25,7 @@
   <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.8.4/moment.js"></script>
   <script src="js/tableau-extensions-1.0.0.min.js"></script>
-  <script src="js/application.js?v=20261027-47"></script>
+  <script src="js/application.js?v=20261027-48"></script>
   <script>const btnExportToCsv=document.getElementById("btnExportToCsv");if(btnExportToCsv)btnExportToCsv.addEventListener("click",()=>{const dataTable=document.getElementById("dataTable");if(!dataTable)return;const e=new TableCSVExporter(dataTable),c=e.convertToCSV(),b=new Blob([c],{type:"text/csv"}),u=URL.createObjectURL(b),a=document.createElement("a"),d=new Date(),p=n=>String(n).padStart(2,"0");a.href=u;a.download="robot-detection-"+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())+".csv";a.click();setTimeout(()=>URL.revokeObjectURL(u),500)});</script>
 </body>
 </html>
