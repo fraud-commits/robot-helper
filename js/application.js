@@ -183,6 +183,7 @@ function RoundTotla(indexStart,indexNext){
 
     PlayerData.push({
       PlayerId: worksheetData[indexStart][0].formattedValue,
+      status: worksheetData[indexStart][7].formattedValue,
       table:  [],
       bet: [],
       time: [],
@@ -277,6 +278,7 @@ function RoundTotla(indexStart,indexNext){
     
    
      element.BetAmount.push(worksheetData[indexStart][5].formattedValue)
+     element.status = worksheetData[indexStart][7].formattedValue;
      element.betRecords.push({ position: String(worksheetData[indexStart][4].formattedValue || ''), amount: worksheetData[indexStart][5].formattedValue });
      let roundKey = String(worksheetData[indexStart][2].formattedValue || '');
      element.roundBetCounts[roundKey] = (element.roundBetCounts[roundKey] || 0) + 1;
@@ -392,7 +394,10 @@ function renderDetectionSummary(playerData){
     const supportingCount = [signals[0], signals[1], signals[2], signals[3], signals[5]].filter(function(value){ return value; }).length;
     const result = bettingMechanism && supportingCount >= 3 && !highVariation ? 'YES' : ((count >= 2 || (signals[0] && !bettingMechanism) || highVariation) ? 'SUSPICIOUS' : 'NO');
     const mechanismLabel = flatBetting ? 'Flat betting' : (repeatedSignature ? 'Repeated position + amount' : (progressivePattern ? 'Progressive sequence' : 'None detected'));
-    return { player: player, count: count, result: result, roundCount: roundTimes.length, avgGap: avgGapSec / 60, entropy: Number(player.entropy()) || 0, betCv: betCv, longPausePct: longPausePct, gapCv: gapCv, positionCount: player.bet.length, structurePct: structurePct, matchedSignals: matchedSignals, missedSignals: missedSignals, bettingMechanism: mechanismLabel, highVariation: highVariation, supportingCount: supportingCount };
+    const statusText = String(player.status || '');
+    const reportedMatch = statusText.match(/ADVANTAGE\s+(\d+)\s+DAY(?:S)?\s+AGO/i);
+    const previouslyReported = reportedMatch ? reportedMatch[1] + ' days ago' : 'NO';
+    return { player: player, count: count, result: result, roundCount: roundTimes.length, avgGap: avgGapSec / 60, entropy: Number(player.entropy()) || 0, betCv: betCv, longPausePct: longPausePct, gapCv: gapCv, positionCount: player.bet.length, structurePct: structurePct, matchedSignals: matchedSignals, missedSignals: missedSignals, bettingMechanism: mechanismLabel, highVariation: highVariation, supportingCount: supportingCount, previouslyReported: previouslyReported };
   }
   const analyses = playerData.map(analyze), yes = analyses.filter(function(item){ return item.result === 'YES'; }).length, suspicious = analyses.filter(function(item){ return item.result === 'SUSPICIOUS'; }).length, no = analyses.length - yes - suspicious;
   const totalSignals = analyses.reduce(function(sum,item){ return sum + item.count; },0);
@@ -400,7 +405,7 @@ function renderDetectionSummary(playerData){
   const summaryNote = analyses.length === 1 ? 'One player analysed' : (yes + ' YES · ' + suspicious + ' SUSPICIOUS · ' + no + ' NO');
   $('#robot-view').prop('hidden',false); $('#empty-state').hide(); $('#toolbar-player').text(analyses.length + (analyses.length === 1 ? ' PLAYER' : ' PLAYERS')); $('#session-stat').text(Math.round(Math.max.apply(null, analyses.map(function(item){ return item.player.sessionLenght || 0; }))) + ' MIN MAX'); $('#round-stat').text(analyses.reduce(function(sum,item){ return sum + item.roundCount; },0)); $('#gap-stat').text((analyses.reduce(function(sum,item){ return sum + item.avgGap; },0) / analyses.length).toFixed(2) + ' MIN AVG'); $('#signal-stat').text(totalSignals + ' / ' + (analyses.length * 6));
   $('#robot-result').text(analyses.length > 1 ? analyses.length + ' PLAYERS' : summaryResult).removeClass('result-no result-suspicious result-yes').addClass(summaryResult === 'YES' ? 'result-yes' : (summaryResult === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no')); $('#robot-result-note').text(summaryNote);
-   $('#signal-list').html('<div class="table-responsive"><table class="table table-striped table-hover player-analysis-table" id="dataTable"><thead><tr><th>Player ID</th><th>Signals</th><th>Session (min)</th><th>Rounds</th><th>Avg gap</th><th>Bets</th><th>Tables</th><th>Bet CV</th><th>Entropy</th><th>Robot</th></tr></thead><tbody class="robotTable">' + analyses.map(function(item){ const cls = item.result === 'YES' ? 'result-yes' : (item.result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no'); const tooltip = 'Matched: ' + item.matchedSignals.join(', ') + ' | Clear: ' + (item.missedSignals.join(', ') || 'none') + ' | Betting mechanism: ' + item.bettingMechanism + (item.highVariation ? ' | High betting variation' : ''); return '<tr><td>' + item.player.PlayerId + '</td><td><span>' + item.count + ' / 6</span><span class="signal-info" tabindex="0" data-tooltip="' + tooltip + '" aria-label="View matched signals">i</span></td><td>' + Math.round(item.player.sessionLenght || 0) + '</td><td>' + item.roundCount + '</td><td>' + item.avgGap.toFixed(2) + '</td><td>' + item.player.bet.length + '</td><td>' + item.player.table.length + '</td><td>' + item.betCv.toFixed(2) + '</td><td>' + item.entropy.toFixed(2) + '</td><td><strong class="' + cls + '">' + item.result + '</strong></td></tr>'; }).join('') + '</tbody></table></div>');
+   $('#signal-list').html('<div class="table-responsive"><table class="table table-striped table-hover player-analysis-table" id="dataTable"><thead><tr><th>Player ID</th><th>Signals</th><th>Previously reported</th><th>Session (min)</th><th>Rounds</th><th>Avg gap</th><th>Bets</th><th>Tables</th><th>Bet CV</th><th>Entropy</th><th>Robot</th></tr></thead><tbody class="robotTable">' + analyses.map(function(item){ const cls = item.result === 'YES' ? 'result-yes' : (item.result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no'); const tooltip = 'Matched: ' + item.matchedSignals.join(', ') + ' | Clear: ' + (item.missedSignals.join(', ') || 'none') + ' | Betting mechanism: ' + item.bettingMechanism + (item.highVariation ? ' | High betting variation' : ''); return '<tr><td>' + item.player.PlayerId + '</td><td><span>' + item.count + ' / 6</span><span class="signal-info" tabindex="0" data-tooltip="' + tooltip + '" aria-label="View matched signals">i</span></td><td>' + item.previouslyReported + '</td><td>' + Math.round(item.player.sessionLenght || 0) + '</td><td>' + item.roundCount + '</td><td>' + item.avgGap.toFixed(2) + '</td><td>' + item.player.bet.length + '</td><td>' + item.player.table.length + '</td><td>' + item.betCv.toFixed(2) + '</td><td>' + item.entropy.toFixed(2) + '</td><td><strong class="' + cls + '">' + item.result + '</strong></td></tr>'; }).join('') + '</tbody></table></div>');
 }
 function Gettering(){
   
