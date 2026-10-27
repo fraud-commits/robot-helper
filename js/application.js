@@ -340,10 +340,15 @@ function renderDetectionSummary(playerData){
   if(!playerData || !playerData.length){ $('#robot-view').prop('hidden', true); $('#empty-state').show(); return; }
   function analyze(player){
     const roundCount = player.RoundCount.length, avgGap = Number(player.AvgGaps) || 0, entropy = Number(player.entropy()) || 0;
-    const signals = [roundCount > 300, avgGap <= 1, player.bet.length <= 1, entropy < 2.5, player.gaps.length ? player.gaps.filter(function(gap){ return Number(gap) > 3; }).length === 0 : true, player.table.length <= 1];
+    const amounts = (player.BetAmount || []).map(function(value){ const text = String(value || '').replace(/[^0-9.,-]/g, '').replace(',', '.'); const number = parseFloat(text); return isFinite(number) ? number : 0; }).filter(function(value){ return value > 0; });
+    const amountMean = amounts.length ? amounts.reduce(function(sum, value){ return sum + value; }, 0) / amounts.length : 0;
+    const amountSd = amounts.length > 1 ? Math.sqrt(amounts.reduce(function(sum, value){ return sum + Math.pow(value - amountMean, 2); }, 0) / amounts.length) : 0;
+    const betCv = amountMean ? amountSd / amountMean : 0;
+    const flatBetting = amounts.length > 1 && betCv <= 0.10;
+    const signals = [roundCount > 300, avgGap <= 1, player.bet.length <= 1, flatBetting, player.gaps.length ? player.gaps.filter(function(gap){ return Number(gap) > 3; }).length === 0 : true, player.table.length <= 1];
     const count = signals.filter(function(value){ return value; }).length;
     const result = count >= 3 ? 'YES' : (count === 2 ? 'SUSPICIOUS' : 'NO');
-    return { player: player, count: count, result: result, signals: signals, roundCount: roundCount, avgGap: avgGap, entropy: entropy };
+    return { player: player, count: count, result: result, signals: signals, roundCount: roundCount, avgGap: avgGap, entropy: entropy, betCv: betCv };
   }
   const analyses = playerData.map(analyze), yes = analyses.filter(function(item){ return item.result === 'YES'; }).length, suspicious = analyses.filter(function(item){ return item.result === 'SUSPICIOUS'; }).length, no = analyses.length - yes - suspicious;
   const totalSignals = analyses.reduce(function(sum, item){ return sum + item.count; }, 0);
@@ -351,7 +356,7 @@ function renderDetectionSummary(playerData){
   const summaryNote = analyses.length === 1 ? 'One player analysed' : (yes + ' YES · ' + suspicious + ' SUSPICIOUS · ' + no + ' NO');
   $('#robot-view').prop('hidden', false); $('#empty-state').hide(); $('#toolbar-player').text(analyses.length + (analyses.length === 1 ? ' PLAYER' : ' PLAYERS')); $('#session-stat').text(Math.round(Math.max.apply(null, analyses.map(function(item){ return item.player.sessionLenght || 0; }))) + ' MIN MAX'); $('#round-stat').text(analyses.reduce(function(sum, item){ return sum + item.roundCount; }, 0)); $('#gap-stat').text((analyses.reduce(function(sum, item){ return sum + item.avgGap; }, 0) / analyses.length).toFixed(2) + ' MIN AVG'); $('#signal-stat').text(totalSignals + ' / ' + (analyses.length * 6));
   $('#robot-result').text(analyses.length > 1 ? analyses.length + ' PLAYERS' : summaryResult).removeClass('result-no result-suspicious result-yes').addClass(summaryResult === 'YES' ? 'result-yes' : (summaryResult === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no')); $('#robot-result-note').text(summaryNote);
-  $('#signal-list').html('<div class="table-responsive"><table class="table table-striped table-hover player-analysis-table" id="dataTable"><thead><tr><th>Player ID</th><th>Signals</th><th>Session (min)</th><th>Rounds</th><th>Avg gap</th><th>Bets</th><th>Tables</th><th>Entropy</th><th>Robot</th></tr></thead><tbody class="robotTable">' + analyses.map(function(item){ const cls = item.result === 'YES' ? 'result-yes' : (item.result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no'); return '<tr><td>' + item.player.PlayerId + '</td><td>' + item.count + ' / 6</td><td>' + Math.round(item.player.sessionLenght || 0) + '</td><td>' + item.roundCount + '</td><td>' + item.avgGap.toFixed(2) + '</td><td>' + item.player.bet.length + '</td><td>' + item.player.table.length + '</td><td>' + item.entropy.toFixed(2) + '</td><td><strong class="' + cls + '">' + item.result + '</strong></td></tr>'; }).join('') + '</tbody></table></div>');
+  $('#signal-list').html('<div class="table-responsive"><table class="table table-striped table-hover player-analysis-table" id="dataTable"><thead><tr><th>Player ID</th><th>Signals</th><th>Session (min)</th><th>Rounds</th><th>Avg gap</th><th>Bets</th><th>Tables</th><th>Bet CV</th><th>Entropy</th><th>Robot</th></tr></thead><tbody class="robotTable">' + analyses.map(function(item){ const cls = item.result === 'YES' ? 'result-yes' : (item.result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no'); return '<tr><td>' + item.player.PlayerId + '</td><td>' + item.count + ' / 6</td><td>' + Math.round(item.player.sessionLenght || 0) + '</td><td>' + item.roundCount + '</td><td>' + item.avgGap.toFixed(2) + '</td><td>' + item.player.bet.length + '</td><td>' + item.player.table.length + '</td><td>' + item.betCv.toFixed(2) + '</td><td>' + item.entropy.toFixed(2) + '</td><td><strong class="' + cls + '">' + item.result + '</strong></td></tr>'; }).join('') + '</tbody></table></div>');
 }
 function Gettering(){
   
