@@ -47,17 +47,22 @@ function normalizePlayerId(value){
   return ids && ids.length ? ids[ids.length - 1] : text.toLowerCase();
 }
 
+function isPlayerId(value){
+  return /^\d{4,}$/.test(value) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
 function getSelectedPlayerId(){
   const dashboard = tableau.extensions.dashboardContent.dashboard;
   if(!dashboard || !dashboard.getParametersAsync) return Promise.resolve('');
   return dashboard.getParametersAsync().then(function(parameters){
-    const parameter = (parameters || []).find(function(item){
+    const parameterValues = (parameters || []).filter(function(item){
       const name = String(item.name || '').toLowerCase();
       return /(player|user)/.test(name) && /(id|filter)/.test(name);
-    });
-    if(!parameter) return '';
-    const currentValue = parameter.currentValue;
-    return normalizePlayerId(currentValue && (currentValue.value != null ? currentValue.value : currentValue.formattedValue));
+    }).map(function(parameter){
+      const currentValue = parameter.currentValue;
+      return normalizePlayerId(currentValue && (currentValue.value != null ? currentValue.value : currentValue.formattedValue));
+    }).filter(isPlayerId);
+    return parameterValues;
   }).catch(function(){ return ''; });
 }
 
@@ -65,7 +70,8 @@ function updatePlayerRefreshState(selectedId){
   if(refreshInProgress) return;
   const button = $('#btn-refresh-player');
   const rendered = renderedPlayerIds.map(normalizePlayerId).filter(Boolean);
-  const mismatch = Boolean(selectedId && rendered.length && rendered.indexOf(normalizePlayerId(selectedId)) === -1);
+  const selected = Array.isArray(selectedId) ? selectedId : [selectedId];
+  const mismatch = Boolean(selected.length && rendered.length && !rendered.some(function(id){ return selected.indexOf(id) !== -1; }));
   button.toggleClass('refresh-needs-update', mismatch);
   button.attr('data-refresh-tooltip', mismatch ? 'Player ID does not match. Click Refresh.' : 'Refresh extension data');
 }
