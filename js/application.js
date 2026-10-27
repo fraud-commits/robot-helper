@@ -5,6 +5,9 @@ let worksheet = null;
 let worksheetName = null;
 let categoryColumnNumber = null;
 let valueColumnNumber = null;
+let refreshInProgress = false;
+let renderedPlayerIds = [];
+let parameterPollTimer = null;
 
 
 
@@ -13,8 +16,10 @@ let valueColumnNumber = null;
 $(document).ready(function () {
    tableau.extensions.initializeAsync().then(function () {
       // Draw the chart when initialising the dashboard.
-      getSettings();
-      drawChartJS();
+       getSettings();
+       drawChartJS();
+       startPlayerParameterMonitor();
+       $('#btn-refresh-player').on('click', refreshPlayerExtension);
       // Set up the Settings Event Listener.
       unregisterSettingsEventListener = tableau.extensions.settings.addEventListener(tableau.TableauEventType.SettingsChanged, (settingsEvent) => {
          // On settings change.
@@ -23,6 +28,62 @@ $(document).ready(function () {
       });
    }, function () { console.log('Error while Initializing: ' +err.toString()); });
 });
+
+function normalizePlayerId(value){
+  const text = String(value == null ? '' : value).trim();
+  const ids = text.match(/\d{4,}/g);
+  return ids && ids.length ? ids[ids.length - 1] : text.toLowerCase();
+}
+
+function getSelectedPlayerId(){
+  const dashboard = tableau.extensions.dashboardContent.dashboard;
+  if(!dashboard || !dashboard.getParametersAsync) return Promise.resolve('');
+  return dashboard.getParametersAsync().then(function(parameters){
+    const parameter = (parameters || []).find(function(item){
+      const name = String(item.name || '').toLowerCase();
+      return /(player|user)/.test(name) && /(id|filter)/.test(name);
+    });
+    if(!parameter) return '';
+    const currentValue = parameter.currentValue;
+    return normalizePlayerId(currentValue && (currentValue.value != null ? currentValue.value : currentValue.formattedValue));
+  }).catch(function(){ return ''; });
+}
+
+function updatePlayerRefreshState(selectedId){
+  if(refreshInProgress) return;
+  const button = $('#btn-refresh-player');
+  const rendered = renderedPlayerIds.map(normalizePlayerId).filter(Boolean);
+  const mismatch = Boolean(selectedId && rendered.length && rendered.indexOf(normalizePlayerId(selectedId)) === -1);
+  button.toggleClass('refresh-needs-update', mismatch);
+  button.attr('data-refresh-tooltip', mismatch ? 'Player ID does not match. Click Refresh.' : 'Refresh extension data');
+}
+
+function startPlayerParameterMonitor(){
+  if(parameterPollTimer) clearInterval(parameterPollTimer);
+  const check = function(){ getSelectedPlayerId().then(updatePlayerRefreshState); };
+  check();
+  parameterPollTimer = setInterval(check, 5000);
+}
+
+function refreshPlayerExtension(){
+  if(refreshInProgress) return;
+  refreshInProgress = true;
+  const button = $('#btn-refresh-player');
+  button.removeClass('refresh-needs-update').addClass('refresh-busy').prop('disabled', true);
+  $('#refresh-overlay').prop('hidden', false);
+  Promise.resolve().then(function(){ return drawChartJS(); }).then(function(){
+    button.attr('data-refresh-tooltip', 'Refresh extension data');
+  }).catch(function(error){
+    console.error('Player refresh failed:', error);
+    $('#robot-result-note').text('Refresh failed. Please try again.');
+    button.attr('data-refresh-tooltip', 'Refresh failed. Click to try again.');
+  }).finally(function(){
+    $('#refresh-overlay').prop('hidden', true);
+    button.removeClass('refresh-busy').prop('disabled', false);
+    refreshInProgress = false;
+    getSelectedPlayerId().then(updatePlayerRefreshState);
+  });
+}
 
 
 
@@ -86,7 +147,7 @@ function drawChartJS() {
 
    
 
-   worksheet.getSummaryDataAsync().then(function (sumdata) {
+   return worksheet.getSummaryDataAsync().then(function (sumdata) {
      
 
      
@@ -367,6 +428,7 @@ element.AvgGaps  = average;
 console.log(PlayerData)
 
 function renderDetectionSummary(playerData){
+  renderedPlayerIds = (playerData || []).map(function(player){ return player.PlayerId; });
   if(!playerData || !playerData.length){ $('#robot-view').prop('hidden', true); $('#empty-state').show(); return; }
   function parseTime(value){ const parsed = moment(String(value || ''), ['DD/MM/YYYY h:mm:ss A','DD/MM/YYYY HH:mm:ss','DD-MM-YYYY HH:mm a'], true); return parsed.isValid() ? parsed.valueOf() : NaN; }
   function analyze(player){
