@@ -1,26 +1,486 @@
+
 let unregisterFilterEventListener = null;
 let unregisterMarkSelectionEventListener = null;
 let worksheet = null;
-let rounds = [];
-let visibleExamples = [];
-let selectedMode = 'bet';
+let worksheetName = null;
+let categoryColumnNumber = null;
+let valueColumnNumber = null;
 
-$(document).ready(function () { bindControls(); tableau.extensions.initializeAsync().then(function () { setupWorksheet(); drawHelper(); }).catch(showError); });
-function getWorksheet() { const sheets = tableau.extensions.dashboardContent.dashboard.worksheets || []; return sheets.find(function (sheet) { return sheet.name === 'fraud2'; }) || sheets[0]; }
-function setupWorksheet() { worksheet = getWorksheet(); if (!worksheet) throw new Error('Worksheet fraud2 was not found on this dashboard.'); if (unregisterFilterEventListener) unregisterFilterEventListener(); if (unregisterMarkSelectionEventListener) unregisterMarkSelectionEventListener(); unregisterFilterEventListener = worksheet.addEventListener(tableau.TableauEventType.FilterChanged, drawHelper); unregisterMarkSelectionEventListener = worksheet.addEventListener(tableau.TableauEventType.MarkSelectionChanged, drawHelper); }
-function bindControls() { $('.mode-option').on('click', function () { selectedMode = $(this).data('mode'); $('.mode-option').removeClass('is-active'); $(this).addClass('is-active'); renderSelectedRound(); }); $('#add-example').on('click', addExample); $('#restart-examples').on('click', function () { visibleExamples = rounds.slice(0, 3); renderExamples(); renderSelectedRound(); }); $('#generate-jpg').on('click', generateJpg); }
-function normalizeName(value) { return String(value || '').toLowerCase().replace(/sum\(|second\(|\)/g, '').replace(/[^a-z0-9]/g, ''); }
-function columnMap(columns) { const map = {}; (columns || []).forEach(function (column, index) { const name = normalizeName(column && (column.fieldName || column.fieldCaption || column.caption)); if (name) map[name] = index; }); function find(names) { for (let i = 0; i < names.length; i += 1) if (map[names[i]] !== undefined) return map[names[i]]; return -1; } return { player: find(['playerid','userid','user']), round: find(['roundid','round']), net: find(['neteur','net']), bet: find(['beteur','bet']), position: find(['betposition','bettype']), time: find(['roundtime','timestamp','time']), game: find(['gametype','game']), operator: find(['companycode','operatorid','operator']) }; }
-function cell(row, index) { return index >= 0 && row && row[index] ? row[index] : null; }
-function rawValue(item) { if (!item) return ''; if (item.value !== null && item.value !== undefined) return String(item.value); return String(item.formattedValue || '').trim(); }
-function numberValue(item) { if (!item) return 0; if (typeof item.value === 'number' && isFinite(item.value)) return item.value; let text = String(item.formattedValue || '').replace(/\u2212/g, '-').replace(/[^0-9.,-]/g, ''); if (text.indexOf(',') >= 0 && text.indexOf('.') >= 0) text = text.lastIndexOf(',') > text.lastIndexOf('.') ? text.replace(/\./g, '').replace(',', '.') : text.replace(/,/g, ''); else if (text.indexOf(',') >= 0) text = /^-?\d{1,3}(,\d{3})+$/.test(text) ? text.replace(/,/g, '') : text.replace(',', '.'); const parsed = parseFloat(text); return isFinite(parsed) ? parsed : 0; }
-function displayNumber(value) { return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-function drawHelper() { if (!worksheet) worksheet = getWorksheet(); if (!worksheet) return showError(new Error('Worksheet fraud2 was not found on this dashboard.')); worksheet.getSummaryDataAsync().then(function (summary) { const data = summary && summary.data ? summary.data : []; const columns = summary && summary.columns ? summary.columns : []; if (!data.length) { $('#helper-view').prop('hidden', true); $('#empty-state').show(); return; } const indexes = columnMap(columns); console.info('ROBOT HELPER column indexes', indexes, columns.map(function (c, i) { return i + ':' + (c.fieldName || c.fieldCaption || ''); })); rounds = buildRounds(data, indexes); visibleExamples = rounds.slice(0, 3); $('#empty-state').hide(); $('#helper-view').prop('hidden', false); updateBreakStats(data, indexes.time); renderExamples(); renderSelectedRound(); }).catch(showError); }
-function buildRounds(data, indexes) { const grouped = {}; data.forEach(function (row) { const id = rawValue(cell(row, indexes.round)) || 'Unknown round'; if (!grouped[id]) grouped[id] = { id: id, net: 0, bet: 0, game: '', positions: {}, rows: [] }; const item = grouped[id]; item.net += numberValue(cell(row, indexes.net)); item.bet += numberValue(cell(row, indexes.bet)); item.game = item.game || rawValue(cell(row, indexes.game)); const position = rawValue(cell(row, indexes.position)) || 'Bet'; item.positions[position] = (item.positions[position] || 0) + numberValue(cell(row, indexes.bet)); item.rows.push(row); }); return Object.keys(grouped).map(function (key) { return grouped[key]; }).sort(function (a, b) { return b.net - a.net; }); }
-function updateBreakStats(data, timeIndex) { const times = data.map(function (row) { return new Date(rawValue(cell(row, timeIndex))).getTime(); }).filter(function (time) { return isFinite(time); }).sort(function (a, b) { return a - b; }); let skips = 0; let shorts = 0; let longs = 0; for (let i = 1; i < times.length; i += 1) { const minutes = (times[i] - times[i - 1]) / 60000; if (minutes >= 3 && minutes < 10) skips += 1; else if (minutes >= 10 && minutes <= 30) shorts += 1; else if (minutes > 30) longs += 1; } $('#skip-count').text(skips); $('#short-count').text(shorts); $('#long-count').text(longs); }
-function renderSelectedRound() { const round = visibleExamples[0] || rounds[0]; if (!round) return; $('#round-title').text('Game Round: ' + round.id + (round.game ? ' ' + round.game : ' Bet Spread')); $('#round-meta').text('NET EUR: ' + displayNumber(round.net) + '   BET EUR: ' + displayNumber(round.bet)); drawRadar(document.getElementById('radar-canvas'), round, 760, 440); }
-function addExample() { const next = rounds.find(function (round) { return visibleExamples.indexOf(round) === -1; }); if (next) { visibleExamples.push(next); renderExamples(); renderSelectedRound(); } }
-function renderExamples() { const container = document.getElementById('examples-container'); container.innerHTML = ''; visibleExamples.forEach(function (round) { const canvas = document.createElement('canvas'); canvas.width = 300; canvas.height = 190; canvas.className = 'example-canvas'; canvas.title = round.id; canvas.addEventListener('click', function () { drawRadar(document.getElementById('radar-canvas'), round, 760, 440); $('#round-title').text('Game Round: ' + round.id + (round.game ? ' ' + round.game : ' Bet Spread')); $('#round-meta').text('NET EUR: ' + displayNumber(round.net) + '   BET EUR: ' + displayNumber(round.bet)); }); container.appendChild(canvas); drawRadar(canvas, round, 300, 190); }); $('#example-count').text(visibleExamples.length + ' / 3'); }
-function drawRadar(canvas, round, width, height) { const ctx = canvas.getContext('2d'); const scale = window.devicePixelRatio || 1; canvas.width = width * scale; canvas.height = height * scale; canvas.style.width = width + 'px'; canvas.style.height = height + 'px'; ctx.scale(scale, scale); ctx.clearRect(0, 0, width, height); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, height); const cx = width / 2; const cy = height / 2 + 4; const radius = Math.min(width, height) * 0.30; const labels = Object.keys(round.positions).slice(0, 6); while (labels.length < 6) labels.push(''); const max = Math.max.apply(null, labels.map(function (key) { return round.positions[key] || 0; }).concat([1])); ctx.strokeStyle = '#dfe4eb'; ctx.lineWidth = 1; for (let ring = 1; ring <= 4; ring += 1) { ctx.beginPath(); for (let i = 0; i < 6; i += 1) { const a = -Math.PI / 2 + i * Math.PI / 3; const r = radius * ring / 4; const x = cx + Math.cos(a) * r; const y = cy + Math.sin(a) * r; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); } ctx.closePath(); ctx.stroke(); } for (let i = 0; i < 6; i += 1) { const a = -Math.PI / 2 + i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * radius, cy + Math.sin(a) * radius); ctx.stroke(); } ctx.beginPath(); labels.forEach(function (key, i) { const value = (round.positions[key] || 0) / max; const a = -Math.PI / 2 + i * Math.PI / 3; const x = cx + Math.cos(a) * radius * value; const y = cy + Math.sin(a) * radius * value; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }); ctx.closePath(); ctx.fillStyle = 'rgba(47,128,237,.18)'; ctx.fill(); ctx.strokeStyle = '#2f80ed'; ctx.lineWidth = 2; ctx.stroke(); ctx.font = '11px Arial, sans-serif'; ctx.fillStyle = '#4c5968'; ctx.textAlign = 'center'; labels.forEach(function (key, i) { const a = -Math.PI / 2 + i * Math.PI / 3; ctx.fillText(key ? key.slice(0, 16) : '—', cx + Math.cos(a) * (radius + 25), cy + Math.sin(a) * (radius + 25)); }); ctx.font = '600 13px Arial, sans-serif'; ctx.fillStyle = '#212529'; ctx.fillText('NET EUR ' + displayNumber(round.net), cx, height - 18); }
-function generateJpg() { const canvases = Array.from(document.querySelectorAll('.example-canvas')); if (!canvases.length) return; const out = document.createElement('canvas'); out.width = 620; out.height = Math.ceil(canvases.length / 2) * 220; const ctx = out.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, out.width, out.height); canvases.forEach(function (canvas, index) { ctx.drawImage(canvas, 10 + (index % 2) * 305, 10 + Math.floor(index / 2) * 220, 300, 190); }); const link = document.createElement('a'); link.download = 'robot-helper-examples.jpg'; link.href = out.toDataURL('image/jpeg', .92); link.click(); }
-function showError(error) { console.error(error); $('#helper-view').prop('hidden', true); $('#empty-state').show().find('h2').text('Extension error').end().find('p').text(String(error && error.message ? error.message : error)); }
+
+
+
+
+$(document).ready(function () {
+   tableau.extensions.initializeAsync().then(function () {
+      // Draw the chart when initialising the dashboard.
+      getSettings();
+      drawChartJS();
+      // Set up the Settings Event Listener.
+      unregisterSettingsEventListener = tableau.extensions.settings.addEventListener(tableau.TableauEventType.SettingsChanged, (settingsEvent) => {
+         // On settings change.
+      getSettings();
+       drawChartJS();
+      });
+   }, function () { console.log('Error while Initializing: ' +err.toString()); });
+});
+
+
+
+
+
+
+
+
+
+function getSettings() {
+
+
+   const worksheets = tableau.extensions.dashboardContent.dashboard.worksheets;
+
+   var worksheet = worksheets.find(function (sheet) {
+     return sheet.name === "fraud2";
+   });
+
+
+   if (unregisterFilterEventListener != null) {
+      unregisterFilterEventListener();
+   }
+
+
+   if (unregisterMarkSelectionEventListener != null) {
+      unregisterMarkSelectionEventListener();
+   }
+
+   // Get worksheet
+
+
+   // Add listener
+   unregisterFilterEventListener = worksheet.addEventListener(tableau.TableauEventType.FilterChanged, (filterEvent) => {
+      drawChartJS();
+     
+   });
+
+   unregisterMarkSelectionEventListener = worksheet.addEventListener(tableau.TableauEventType.MarkSelectionChanged, (filterEvent) => {
+      drawChartJS();
+   });
+  
+  
+  
+}
+
+
+
+
+
+function drawChartJS() {
+
+   const worksheets = tableau.extensions.dashboardContent.dashboard.worksheets;
+
+   var worksheet = worksheets.find(function (sheet) {
+     return sheet.name === "fraud2";
+   });
+
+  
+
+
+
+   
+
+   worksheet.getSummaryDataAsync().then(function (sumdata) {
+     
+
+     
+
+   
+    $(".Break-Heat-Map").empty();
+
+     const RoundTime = 0,
+           UserId = 0,
+           UserName= 6,
+           CompanyCode = 1,
+           RoundID = 2,
+           GameType = 4,
+           BetPosition = 7,
+           DealerName = 3,
+           TableName = 6,
+           BetEUR = 8,
+           NetEUR = 9;
+
+           let RoundSkipp = 0;
+           let ShortBreak = 0;
+           let LongBreak = 0;
+           let SequentialGame = 0;
+
+           let indexStart,
+               indexNext;
+          
+           let TotalBet = 0;
+           let TotalNet = 0;
+
+           let RoundArry= [];
+           let RoundArry2= [];
+           let RatioArry= [];
+           let PlayerData = [];
+
+            let totaltest = 0;
+            var worksheetData = sumdata.data;
+     
+            let DealerArry =[];
+            let BetPositionArry =[];
+            let TableArry = [];
+
+            let up = 0,
+            down = 0,
+            same = 0,
+            negativ = 0,
+            martingeil = 0,
+            chaotic = 0;
+
+            let SideBetArry = ["Banker Bonus", "Banker Pair", "Phoenix Pair", "Player Bonus","Player Pair", "Small","Super 6"];
+            
+
+
+            
+         
+
+
+function Trigger(){
+
+  for (var i = 0; i < worksheetData.length; i++) {
+
+    indexStart = i;
+      
+    if(i == worksheetData.length - 1){
+
+      indexNext =  worksheetData.length -1
+
+
+    }else{
+      indexNext = i + 1
+    }
+                              
+    if(worksheetData.length > 4){
+    //  BreakCounter(indexStart,indexNext)
+    }
+    RoundTotla(indexStart,indexNext)
+  }
+
+ 
+}
+Trigger();
+
+    
+
+// PlayerData array
+function RoundTotla(indexStart,indexNext){
+ 
+
+
+  let index = PlayerData.findIndex(object => object.PlayerId === worksheetData[indexStart][0].formattedValue);
+
+
+  if (index === -1) {
+
+    PlayerData.push({
+      PlayerId: worksheetData[indexStart][0].formattedValue,
+      table:  [],
+      bet: [],
+      time: [],
+      gaps: [],
+      sessionLenght: 0,
+      AvgGaps: 0,
+      RoundCount:[],
+      BetAmount:[],
+      entropy: function() {
+        var roundCombinationCounts = {}; 
+        var totalCombinations = 0;
+        var entropy = 0;
+
+
+        this.RoundCount.forEach((roundId, index) => {
+            const betCombination = this.bet[index] + "_" + this.BetAmount[index];
+            if (!roundCombinationCounts[roundId]) {
+                roundCombinationCounts[roundId] = {};
+            }
+            if (!roundCombinationCounts[roundId][betCombination]) {
+                roundCombinationCounts[roundId][betCombination] = 0;
+            }
+            roundCombinationCounts[roundId][betCombination] += 1;
+            totalCombinations += 1;
+        });
+
+        var allCombinations = [];
+        Object.values(roundCombinationCounts).forEach((combinations) => {
+            Object.keys(combinations).forEach((combination) => {
+                allCombinations.push(combination); 
+            });
+        });
+
+
+    var combinationCounts = {};
+    allCombinations.forEach((combination) => {
+        combinationCounts[combination] = (combinationCounts[combination] || 0) + 1;
+    });
+
+
+    Object.values(combinationCounts).forEach((count) => {
+        var probability = count / totalCombinations;
+        entropy -= probability * Math.log2(probability);
+    });
+
+    return entropy; 
+}
+
+
+
+      
+      /*
+      entropy: function(){
+        
+       var counts = {};  // create an empty object to store the counts of each value in the sequence
+      var entropy = 0;  // initialize entropy to 0
+      var sequence = this.bet;
+    // loop through the sequence and count the occurrences of each value
+    for (var i = 0; i < sequence.length; i++) {
+        var value = sequence[i];
+        if (counts[value]) {
+            counts[value]++;
+        } else {
+            counts[value] = 1;
+        }
+    }
+  
+    // loop through the counts and calculate the entropy
+    for (var value in counts) {
+        var probability = counts[value] / sequence.length;
+        entropy -= probability * Math.log2(probability);
+    }
+  
+    return entropy;
+    }
+
+
+*/
+
+    })
+  }
+
+  let RoundTime = 1;
+
+  let element = PlayerData.find(e => e.PlayerId === worksheetData[indexStart][0].formattedValue);
+  
+  //alert(element.RoundCount)
+  if (element) {
+    
+   
+    element.BetAmount.push(worksheetData[indexStart][5].formattedValue)
+ //   element.TotalRoundBet += worksheetData[indexStart][BetEUR].value;
+  //  element.TotalRoundNet += worksheetData[indexStart][NetEUR].value;
+       // element.table.push(worksheetData[indexStart][3].formattedValue)
+       // console.log(element.table)
+       // let indexx = element.table.findIndex(object => object.table === worksheetData[indexStart][3].formattedValue);
+
+
+
+  if (!element.table.includes(worksheetData[indexStart][3].formattedValue)) {
+          element.table.push(worksheetData[indexStart][3].formattedValue);
+    }
+  if (!element.bet.includes(worksheetData[indexStart][4].formattedValue)) {
+        element.bet.push(worksheetData[indexStart][4].formattedValue);
+    }
+      
+  if (!element.time.includes(worksheetData[indexStart][1].formattedValue)) {
+      element.time.push(worksheetData[indexStart][1].formattedValue);
+    }
+
+  if (!element.RoundCount.includes(worksheetData[indexStart][2].formattedValue)) {
+    element.RoundCount.push(worksheetData[indexStart][2].formattedValue);
+    }
+    
+
+
+  
+
+  var startTime=moment(worksheetData[indexStart][1].formattedValue, "DD-MM-YYYY HH:mm a");
+  var endTime=moment(worksheetData[indexNext][1].formattedValue, "DD-MM-YYYY HH:mm a");
+  var duration = moment.duration(endTime.diff(startTime));
+  var hours = parseInt(duration.asHours());
+  var minutes = parseInt(duration.asMinutes())-hours*60;
+  
+  //console.log(duration)
+  let fromMinutes = Math.floor(duration.asMinutes());
+  element.gaps.push(fromMinutes);
+
+  let lengghtTime = element.time.length - 1;
+  var startTimeR=moment(element.time[0], "DD-MM-YYYY HH:mm a");
+  var endTimeR=moment(element.time[lengghtTime], "DD-MM-YYYY HH:mm a");
+  var durationR = moment.duration(endTimeR.diff(startTimeR));
+
+  
+  let fromMinutes2 = Math.floor(durationR.asMinutes());
+  element.sessionLenght = fromMinutes2;
+
+
+
+  const numbers = element.gaps
+  const sum = numbers.reduce((a, b) => a + b, 0);
+  const average = sum / numbers.length;
+
+
+element.AvgGaps  = average;
+}
+
+
+
+}
+
+console.log(PlayerData)
+
+function renderDetectionSummary(playerData){
+  if(!playerData || !playerData.length){ $('#robot-view').prop('hidden', true); $('#empty-state').show(); return; }
+  const player = playerData[0], roundCount = player.RoundCount.length, avgGap = Number(player.AvgGaps) || 0, entropy = Number(player.entropy()) || 0;
+  const signals = [['Long session', roundCount > 300, roundCount + ' rounds'],['Fast / stable pace', avgGap <= 1, avgGap.toFixed(2) + ' min average gap'],['Repeated bet positions', player.bet.length <= 1, player.bet.length + ' bet types'],['Low bet variation', entropy < 2.5, 'entropy ' + entropy.toFixed(2)],['Few meaningful breaks', player.gaps.length ? player.gaps.filter(function(gap){return Number(gap) > 3;}).length === 0 : true, 'break pattern'],['Table concentration', player.table.length <= 1, player.table.length + ' table(s)']];
+  const signalCount = signals.filter(function(signal){return signal[1];}).length, result = signalCount >= 3 ? 'YES' : (signalCount === 2 ? 'SUSPICIOUS' : 'NO'), note = result === 'YES' ? 'Several mechanical behaviour signals detected' : (result === 'SUSPICIOUS' ? 'Some signals require further review' : 'No strong automation pattern detected');
+  $('#robot-view').prop('hidden', false); $('#empty-state').hide(); $('#toolbar-player').text(player.PlayerId || '—'); $('#session-stat').text(Math.round(player.sessionLenght || 0) + ' MIN'); $('#round-stat').text(roundCount); $('#gap-stat').text(avgGap.toFixed(2) + ' MIN'); $('#signal-stat').text(signalCount + ' / 6');
+  $('#robot-result').text(result).removeClass('result-no result-suspicious result-yes').addClass(result === 'YES' ? 'result-yes' : (result === 'SUSPICIOUS' ? 'result-suspicious' : 'result-no')); $('#robot-result-note').text(note);
+  $('#signal-list').html(signals.map(function(signal){return '<div class="signal-row"><span class="signal-dot ' + (signal[1] ? 'signal-on' : 'signal-off') + '"></span><span class="signal-name">' + signal[0] + '</span><span class="signal-detail">' + signal[2] + '</span><strong class="signal-state">' + (signal[1] ? 'SIGNAL' : 'CLEAR') + '</strong></div>';}).join(''));
+}
+
+function Gettering(){
+  
+  let robot;
+  
+  for(let i = 0; i < PlayerData.length; i++){
+
+    //if((PlayerData[i].RoundCount.length > 300 || PlayerData[i].sessionLenght >= 180 ) && PlayerData[i].entropy() < 2.50 )
+    if((PlayerData[i].RoundCount.length > 300 ) && PlayerData[i].entropy() < 2.50 ){
+
+      if(PlayerData[i].AvgGaps > 1 ){
+        robot = "True"
+      }else if (PlayerData[i].bet.length >= 1){
+        robot = "True"
+      }
+      robot = "True"
+      
+    }else{
+      robot = "False"
+    }
+    
+    
+    
+   // PlayerData
+    
+    
+    
+    
+    
+    
+    
+ 
+    let icone;
+    if (robot === "True") { // Check if the robot property is true for the current player
+        icone = '<i class="bi bi-robot"></i>';
+    } else {
+        icone = ''; // Empty cell if not a robot
+    }
+    
+
+    
+    $(".robotTable").append(`
+    <tr>
+      <td>` + PlayerData[i].PlayerId + `</td>
+      <td>` + PlayerData[i].sessionLenght + `</td>
+      <td>` + +PlayerData[i].RoundCount.length + `</td>
+      <td>`+ PlayerData[i].AvgGaps +` </td>
+      <td>`+ PlayerData[i].bet.length +` </td>
+      <td>`+ PlayerData[i].table.length +` </td>
+      <td>`+ PlayerData[i].entropy() +` </td>
+      <td>`+ robot +` </td>
+      <td>`+ icone +` </td>
+      </tr>
+      `
+    )
+
+
+
+
+  }
+}
+renderDetectionSummary(PlayerData);
+$(".robotTable").empty();
+Gettering()
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+   });
+ }
+
+
+
+
+ 
+
+ class TableCSVExporter {
+  constructor (table, includeHeaders = true) {
+      this.table = table;
+      this.rows = Array.from(table.querySelectorAll("tr"));
+
+      if (!includeHeaders && this.rows[0].querySelectorAll("th").length) {
+          this.rows.shift();
+      }
+  }
+
+  convertToCSV () {
+      const lines = [];
+      const numCols = this._findLongestRowLength();
+
+      for (const row of this.rows) {
+          let line = "";
+
+          for (let i = 0; i < numCols; i++) {
+              if (row.children[i] !== undefined) {
+                  line += TableCSVExporter.parseCell(row.children[i]);
+              }
+
+              line += (i !== (numCols - 1)) ? "," : "";
+          }
+
+          lines.push(line);
+      }
+
+      return lines.join("\n");
+  }
+
+  _findLongestRowLength () {
+      return this.rows.reduce((l, row) => row.childElementCount > l ? row.childElementCount : l, 0);
+  }
+
+  static parseCell (tableCell) {
+      let parsedValue = tableCell.textContent;
+
+      // Replace all double quotes with two double quotes
+      parsedValue = parsedValue.replace(/"/g, `""`);
+
+      // If value contains comma, new-line or double-quote, enclose in double quotes
+      parsedValue = /[",\n]/.test(parsedValue) ? `"${parsedValue}"` : parsedValue;
+
+      return parsedValue;
+  }
+}
+
+
+
+
+
+
